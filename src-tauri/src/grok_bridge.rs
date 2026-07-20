@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
     process::Stdio,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicU64, Ordering},
         Arc,
     },
     time::Duration,
@@ -257,12 +257,8 @@ fn open_external_url(url: &str) -> Result<(), String> {
         .map_err(|error| format!("Could not open the system browser: {error}"))
 }
 
-async fn forward_oauth_output<R>(
-    reader: R,
-    app: AppHandle,
-    browser_opened: Arc<AtomicBool>,
-    output_lines: Arc<Mutex<Vec<String>>>,
-) where
+async fn forward_oauth_output<R>(reader: R, app: AppHandle, output_lines: Arc<Mutex<Vec<String>>>)
+where
     R: AsyncRead + Unpin,
 {
     let mut lines = BufReader::new(reader).lines();
@@ -270,20 +266,8 @@ async fn forward_oauth_output<R>(
         let _ = app.emit("grok://stderr", line.clone());
         output_lines.lock().await.push(line.clone());
 
-        let Some(url) = login_url_from_output(&line) else {
-            continue;
-        };
-        if browser_opened.swap(true, Ordering::AcqRel) {
-            continue;
-        }
-
-        match open_external_url(&url) {
-            Ok(()) => {
-                let _ = app.emit("grok://status", "浏览器已打开，请完成 Grok 登录…");
-            }
-            Err(error) => {
-                let _ = app.emit("grok://stderr", format!("[OAuth] {error}"));
-            }
+        if login_url_from_output(&line).is_some() {
+            let _ = app.emit("grok://status", "请在浏览器中完成 Grok 登录…");
         }
     }
 }
@@ -672,14 +656,12 @@ pub async fn start_oauth_login(app: AppHandle) -> Result<(), String> {
         .spawn()
         .map_err(|error| format!("Failed to start official Grok OAuth: {error}"))?;
 
-    let browser_opened = Arc::new(AtomicBool::new(false));
     let output_lines = Arc::new(Mutex::new(Vec::new()));
 
     let stdout_task = child.stdout.take().map(|stdout| {
         tokio::spawn(forward_oauth_output(
             stdout,
             app.clone(),
-            browser_opened.clone(),
             output_lines.clone(),
         ))
     });
@@ -687,7 +669,6 @@ pub async fn start_oauth_login(app: AppHandle) -> Result<(), String> {
         tokio::spawn(forward_oauth_output(
             stderr,
             app.clone(),
-            browser_opened,
             output_lines.clone(),
         ))
     });
