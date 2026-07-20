@@ -36,6 +36,11 @@ interface ClientRequestPayload {
   params?: Record<string, unknown>;
 }
 
+interface OAuthResultPayload {
+  succeeded: boolean;
+  message?: string | null;
+}
+
 const formatTime = () =>
   new Intl.DateTimeFormat("en", {
     hour: "2-digit",
@@ -175,7 +180,7 @@ export function useGrokRuntime(workspacePath: string) {
         setTerminalLines((current) => [...current, line].slice(-120));
       }),
       listenDesktopEvent<string>("grok://status", (status) => setStatusText(status)),
-      listenDesktopEvent<boolean>("grok://auth-complete", (succeeded) => {
+      listenDesktopEvent<OAuthResultPayload>("grok://auth-complete", ({ succeeded, message }) => {
         setSigningIn(false);
         if (succeeded) {
           void refreshRuntime();
@@ -191,7 +196,7 @@ export function useGrokRuntime(workspacePath: string) {
           );
           setStatusText("Grok Build · Sign in required");
           setError(
-            "Official Grok OAuth did not complete. You can try again from Settings.",
+            message || "官方 Grok 登录没有完成，请从 Settings 重新尝试。",
           );
         }
       }),

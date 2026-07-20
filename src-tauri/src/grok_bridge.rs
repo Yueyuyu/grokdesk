@@ -5,14 +5,14 @@ use std::{
     path::{Path, PathBuf},
     process::Stdio,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
     time::Duration,
 };
 use tauri::{AppHandle, Emitter, State};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, Command},
     sync::{oneshot, Mutex},
     time::timeout,
@@ -48,6 +48,13 @@ pub struct GrokSubscription {
     tier: Option<String>,
     credit_usage_percent: Option<f64>,
     period_end: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OAuthResult {
+    succeeded: bool,
+    message: Option<String>,
 }
 
 fn subscription_from_billing(billing: &Value) -> GrokSubscription {
@@ -93,6 +100,111 @@ fn hide_console(command: &mut Command) {
         use std::os::windows::process::CommandExt;
         command.as_std_mut().creation_flags(CREATE_NO_WINDOW);
     }
+}
+
+fn login_url_from_output(line: &str) -> Option<String> {
+    let start = line.find("https://")?;
+    let candidate = &line[start..];
+    let end = candidate
+        .find(|character: char| character.is_whitespace() || character == '\u{1b}')
+        .unwrap_or(candidate.len());
+    let url = candidate[..end].trim_end_matches(|character| {
+        matches!(
+            character,
+            '.' | ',' | ';' | ':' | ')' | ']' | '}' | '"' | '\''
+        )
+    });
+
+    let host = url
+        .strip_prefix("https://")?
+        .split(['/', '?', '#'])
+        .next()?;
+    if host != "auth.x.ai" && host != "accounts.x.ai" {
+        return None;
+    }
+
+    (!url.is_empty()).then(|| url.to_string())
+}
+
+fn open_external_url(url: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("rundll32.exe");
+        command.args(["url.dll,FileProtocolHandler", url]);
+        hide_console(&mut command);
+        command
+    };
+
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg(url);
+        command
+    };
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(url);
+        command
+    };
+
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(false)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Could not open the system browser: {error}"))
+}
+
+async fn forward_oauth_output<R>(
+    reader: R,
+    app: AppHandle,
+    browser_opened: Arc<AtomicBool>,
+    output_lines: Arc<Mutex<Vec<String>>>,
+) where
+    R: AsyncRead + Unpin,
+{
+    let mut lines = BufReader::new(reader).lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        let _ = app.emit("grok://stderr", line.clone());
+        output_lines.lock().await.push(line.clone());
+
+        let Some(url) = login_url_from_output(&line) else {
+            continue;
+        };
+        if browser_opened.swap(true, Ordering::AcqRel) {
+            continue;
+        }
+
+        match open_external_url(&url) {
+            Ok(()) => {
+                let _ = app.emit("grok://status", "浏览器已打开，请完成 Grok 登录…");
+            }
+            Err(error) => {
+                let _ = app.emit("grok://stderr", format!("[OAuth] {error}"));
+            }
+        }
+    }
+}
+
+fn oauth_failure_message(lines: &[String]) -> String {
+    let detail = lines.iter().rev().find_map(|line| {
+        let lower = line.to_ascii_lowercase();
+        let looks_like_error = lower.contains("error")
+            || lower.contains("failed")
+            || lower.contains("could not")
+            || lower.contains("cancel")
+            || lower.contains("timed out");
+        (looks_like_error && login_url_from_output(line).is_none()).then(|| line.trim().to_string())
+    });
+
+    detail.map_or_else(
+        || "官方 Grok 登录没有完成。请重新尝试，并在浏览器中完成授权。".to_string(),
+        |detail| format!("官方 Grok 登录没有完成：{detail}"),
+    )
 }
 
 fn canonical_workspace(cwd: &str) -> Result<PathBuf, String> {
@@ -455,22 +567,43 @@ pub async fn start_oauth_login(app: AppHandle) -> Result<(), String> {
         .spawn()
         .map_err(|error| format!("Failed to start official Grok OAuth: {error}"))?;
 
-    if let Some(stdout) = child.stdout.take() {
-        let app_for_stdout = app.clone();
-        tokio::spawn(async move {
-            let mut lines = BufReader::new(stdout).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                let _ = app_for_stdout.emit("grok://stderr", line);
-            }
-        });
-    }
-    if let Some(stderr) = child.stderr.take() {
-        tokio::spawn(stderr_reader(stderr, app.clone()));
-    }
+    let browser_opened = Arc::new(AtomicBool::new(false));
+    let output_lines = Arc::new(Mutex::new(Vec::new()));
+
+    let stdout_task = child.stdout.take().map(|stdout| {
+        tokio::spawn(forward_oauth_output(
+            stdout,
+            app.clone(),
+            browser_opened.clone(),
+            output_lines.clone(),
+        ))
+    });
+    let stderr_task = child.stderr.take().map(|stderr| {
+        tokio::spawn(forward_oauth_output(
+            stderr,
+            app.clone(),
+            browser_opened,
+            output_lines.clone(),
+        ))
+    });
 
     tokio::spawn(async move {
-        let succeeded = child.wait().await.is_ok_and(|status| status.success());
-        let _ = app.emit("grok://auth-complete", succeeded);
+        let process_succeeded = child.wait().await.is_ok_and(|status| status.success());
+        if let Some(task) = stdout_task {
+            let _ = task.await;
+        }
+        if let Some(task) = stderr_task {
+            let _ = task.await;
+        }
+
+        let credentials_created = detect_runtime().authentication_state == "configured";
+        let succeeded = process_succeeded && credentials_created;
+        let message = if succeeded {
+            None
+        } else {
+            Some(oauth_failure_message(&output_lines.lock().await))
+        };
+        let _ = app.emit("grok://auth-complete", OAuthResult { succeeded, message });
     });
 
     Ok(())
@@ -594,38 +727,8 @@ pub async fn fetch_grok_subscription(
 #[tauri::command]
 pub async fn open_grok_subscription() -> Result<(), String> {
     const SUBSCRIPTION_URL: &str = "https://grok.com/supergrok?referrer=grok-build";
-
-    #[cfg(target_os = "windows")]
-    let mut command = {
-        let mut command = Command::new("cmd.exe");
-        command.args(["/C", "start", "", SUBSCRIPTION_URL]);
-        hide_console(&mut command);
-        command
-    };
-
-    #[cfg(target_os = "macos")]
-    let mut command = {
-        let mut command = Command::new("open");
-        command.arg(SUBSCRIPTION_URL);
-        command
-    };
-
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let mut command = {
-        let mut command = Command::new("xdg-open");
-        command.arg(SUBSCRIPTION_URL);
-        command
-    };
-
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .kill_on_drop(false)
-        .spawn()
-        .map_err(|error| format!("Could not open the official SuperGrok page: {error}"))?;
-
-    Ok(())
+    open_external_url(SUBSCRIPTION_URL)
+        .map_err(|error| format!("Could not open the official SuperGrok page: {error}"))
 }
 
 #[cfg(test)]
@@ -685,6 +788,39 @@ mod tests {
         assert_eq!(
             subscription.period_end.as_deref(),
             Some("2026-08-08T00:00:00Z")
+        );
+    }
+
+    #[test]
+    fn extracts_login_url_from_cli_output() {
+        assert_eq!(
+            login_url_from_output("Open this URL to sign in: https://auth.x.ai/oauth?state=test"),
+            Some("https://auth.x.ai/oauth?state=test".to_string())
+        );
+        assert_eq!(
+            login_url_from_output("\u{1b}[36mhttps://accounts.x.ai/login\u{1b}[0m"),
+            Some("https://accounts.x.ai/login".to_string())
+        );
+        assert_eq!(
+            login_url_from_output("Opening your browser to sign in"),
+            None
+        );
+        assert_eq!(
+            login_url_from_output("Ignore unrelated URL: https://example.com/login"),
+            None
+        );
+    }
+
+    #[test]
+    fn oauth_failure_prefers_actionable_cli_error() {
+        let lines = vec![
+            "Opening your browser to sign in".to_string(),
+            "Authentication failed: request timed out".to_string(),
+        ];
+
+        assert_eq!(
+            oauth_failure_message(&lines),
+            "官方 Grok 登录没有完成：Authentication failed: request timed out"
         );
     }
 }
