@@ -44,7 +44,7 @@ export function OnboardingPanel({
         <header className="onboarding-header">
           <img src={appIcon} alt="" />
           <div>
-            <span>GrokDesk v0.1.2</span>
+            <span>GrokDesk v0.1.3</span>
             <h1 id="onboarding-title">三步开始使用 GrokDesk</h1>
             <p>
               不需要先打开终端。GrokDesk 可以安装官方 Grok Runtime，随后直接跳转到官方 OAuth 登录。

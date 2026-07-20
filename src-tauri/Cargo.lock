@@ -1141,7 +1141,7 @@ dependencies = [
 
 [[package]]
 name = "grokdesk"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "dirs",
  "serde",
@@ -1151,6 +1151,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tokio",
  "which",
+ "winreg",
 ]
 
 [[package]]

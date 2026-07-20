@@ -102,6 +102,93 @@ fn hide_console(command: &mut Command) {
     }
 }
 
+#[cfg(windows)]
+fn normalize_proxy_endpoint(endpoint: &str) -> Option<String> {
+    let endpoint = endpoint.trim();
+    if endpoint.is_empty() || endpoint.chars().any(char::is_whitespace) {
+        return None;
+    }
+
+    let lower = endpoint.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") {
+        return Some(endpoint.to_string());
+    }
+    if endpoint.contains("://") {
+        return None;
+    }
+
+    Some(format!("http://{endpoint}"))
+}
+
+#[cfg(windows)]
+fn proxy_url_from_windows_setting(setting: &str) -> Option<String> {
+    let setting = setting.trim();
+    if setting.is_empty() {
+        return None;
+    }
+
+    if !setting.contains('=') {
+        return normalize_proxy_endpoint(setting);
+    }
+
+    for preferred_protocol in ["https", "http"] {
+        let endpoint = setting.split(';').find_map(|entry| {
+            let (protocol, endpoint) = entry.split_once('=')?;
+            protocol
+                .trim()
+                .eq_ignore_ascii_case(preferred_protocol)
+                .then_some(endpoint)
+        });
+        if let Some(proxy) = endpoint.and_then(normalize_proxy_endpoint) {
+            return Some(proxy);
+        }
+    }
+
+    None
+}
+
+#[cfg(windows)]
+fn windows_system_proxy() -> Option<String> {
+    use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+
+    let internet_settings = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")
+        .ok()?;
+    let enabled: u32 = internet_settings.get_value("ProxyEnable").ok()?;
+    if enabled == 0 {
+        return None;
+    }
+
+    let proxy_server: String = internet_settings.get_value("ProxyServer").ok()?;
+    proxy_url_from_windows_setting(&proxy_server)
+}
+
+#[cfg(windows)]
+fn apply_windows_system_proxy(command: &mut Command) -> bool {
+    let Some(proxy) = windows_system_proxy() else {
+        return false;
+    };
+
+    let mut applied = false;
+    if std::env::var_os("HTTPS_PROXY").is_none() && std::env::var_os("https_proxy").is_none() {
+        command
+            .env("HTTPS_PROXY", &proxy)
+            .env("https_proxy", &proxy);
+        applied = true;
+    }
+    if std::env::var_os("HTTP_PROXY").is_none() && std::env::var_os("http_proxy").is_none() {
+        command.env("HTTP_PROXY", &proxy).env("http_proxy", &proxy);
+        applied = true;
+    }
+
+    applied
+}
+
+#[cfg(not(windows))]
+fn apply_windows_system_proxy(_command: &mut Command) -> bool {
+    false
+}
+
 fn login_url_from_output(line: &str) -> Option<String> {
     let start = line.find("https://")?;
     let candidate = &line[start..];
@@ -115,11 +202,22 @@ fn login_url_from_output(line: &str) -> Option<String> {
         )
     });
 
-    let host = url
-        .strip_prefix("https://")?
-        .split(['/', '?', '#'])
-        .next()?;
-    if host != "auth.x.ai" && host != "accounts.x.ai" {
+    let endpoint = url.strip_prefix("https://")?;
+    let host_end = endpoint.find(['/', '?', '#']).unwrap_or(endpoint.len());
+    let host = &endpoint[..host_end];
+    if !host.eq_ignore_ascii_case("auth.x.ai") && !host.eq_ignore_ascii_case("accounts.x.ai") {
+        return None;
+    }
+
+    let path = endpoint[host_end..]
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let is_login_path = ["oauth", "authorize", "login", "sign-in", "signin", "device"]
+        .iter()
+        .any(|segment| path.contains(segment));
+    if path.starts_with("/.well-known/") || !is_login_path {
         return None;
     }
 
@@ -406,6 +504,7 @@ pub async fn start_acp_session(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    apply_windows_system_proxy(&mut command);
     hide_console(&mut command);
 
     let mut child = command
@@ -561,6 +660,12 @@ pub async fn start_oauth_login(app: AppHandle) -> Result<(), String> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(false);
+    if apply_windows_system_proxy(&mut command) {
+        let _ = app.emit(
+            "grok://stderr",
+            "[network] Using the active Windows system proxy for official Grok OAuth.",
+        );
+    }
     hide_console(&mut command);
 
     let mut child = command
@@ -809,6 +914,26 @@ mod tests {
             login_url_from_output("Ignore unrelated URL: https://example.com/login"),
             None
         );
+        assert_eq!(
+            login_url_from_output(
+                "Error: error sending request for url (https://auth.x.ai/.well-known/openid-configuration): operation timed out"
+            ),
+            None
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalizes_windows_system_proxy_settings() {
+        assert_eq!(
+            proxy_url_from_windows_setting("127.0.0.1:7890"),
+            Some("http://127.0.0.1:7890".to_string())
+        );
+        assert_eq!(
+            proxy_url_from_windows_setting("http=127.0.0.1:8080;https=127.0.0.1:7890"),
+            Some("http://127.0.0.1:7890".to_string())
+        );
+        assert_eq!(proxy_url_from_windows_setting("socks=127.0.0.1:7891"), None);
     }
 
     #[test]
