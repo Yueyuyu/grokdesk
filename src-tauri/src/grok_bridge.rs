@@ -50,7 +50,7 @@ pub struct GrokSubscription {
     period_end: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct OAuthResult {
     succeeded: bool,
