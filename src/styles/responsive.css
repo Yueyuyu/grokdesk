@@ -1,0 +1,274 @@
+@media (max-width: 1180px) {
+  .app-grid,
+  .app-grid.inspector-is-collapsed {
+    grid-template-columns: var(--sidebar-width) 4px minmax(0, 1fr);
+  }
+
+  .app-grid > .pane-resizer--right {
+    display: none;
+  }
+
+  .inspector {
+    position: absolute;
+    z-index: 30;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(var(--inspector-width), calc(100% - 220px));
+    border-left: 1px solid var(--border-strong);
+    box-shadow: -16px 0 38px rgba(27, 39, 55, 0.13);
+  }
+
+  .inspector-is-collapsed .inspector {
+    display: none;
+  }
+
+  .conversation {
+    width: min(100%, 760px);
+  }
+
+  .composer {
+    width: min(100%, 760px);
+  }
+}
+
+@media (max-width: 880px) {
+  :root {
+    --sidebar-width: 72px !important;
+  }
+
+  .titlebar__brand {
+    min-width: 72px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .titlebar__brand span,
+  .sidebar__section-label,
+  .workspace-switcher__label,
+  .workspace-switcher > svg,
+  .nav-row > span,
+  .task-history,
+  .profile-row > span,
+  .profile-row > svg,
+  .runtime-row > span:nth-child(2),
+  .runtime-row > svg {
+    display: none;
+  }
+
+  .sidebar__top {
+    padding-inline: 10px;
+  }
+
+  .workspace-switcher {
+    display: grid;
+    padding: 0;
+    place-items: center;
+  }
+
+  .primary-nav {
+    margin-top: 14px;
+  }
+
+  .nav-row {
+    display: grid;
+    padding: 0;
+    place-items: center;
+    grid-template-columns: 1fr;
+  }
+
+  .nav-row svg {
+    grid-area: 1 / 1;
+  }
+
+  .sidebar__bottom {
+    display: grid;
+    justify-items: center;
+    padding-inline: 8px;
+  }
+
+  .profile-row {
+    justify-content: center;
+  }
+
+  .runtime-row {
+    justify-content: center;
+  }
+
+  .task-header {
+    min-height: 94px;
+    padding-inline: 20px;
+  }
+
+  .task-header__actions .secondary-button {
+    width: 36px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .conversation {
+    padding-inline: 18px;
+  }
+
+  .tool-strip {
+    grid-template-columns: repeat(3, minmax(72px, 1fr));
+  }
+
+  .tool-item:nth-child(n + 4) {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --titlebar-height: 38px;
+  }
+
+  .window-controls button {
+    width: 40px;
+  }
+
+  .app-grid,
+  .app-grid.inspector-is-collapsed {
+    grid-template-columns: 54px 1px minmax(0, 1fr);
+  }
+
+  .titlebar__brand {
+    min-width: 55px;
+    border-right: 0;
+  }
+
+  .titlebar__logo {
+    width: 21px;
+    height: 21px;
+  }
+
+  .sidebar__top {
+    padding: 12px 6px;
+  }
+
+  .sidebar__bottom {
+    padding: 6px;
+  }
+
+  .workspace-switcher,
+  .nav-row {
+    height: 38px;
+  }
+
+  .task-header {
+    position: relative;
+    min-height: 126px;
+    align-items: flex-start;
+    padding: 14px 14px 50px;
+  }
+
+  .task-header > div:first-child {
+    width: 100%;
+    min-width: 0;
+    padding-right: 52px;
+  }
+
+  .task-header h1 {
+    max-width: 230px;
+    font-size: 18px;
+  }
+
+  .task-header p {
+    max-width: 250px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .task-header__actions {
+    position: absolute;
+    bottom: 10px;
+    left: 14px;
+    gap: 5px;
+  }
+
+  .conversation {
+    padding: 12px;
+  }
+
+  .message {
+    grid-template-columns: 27px minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .message__avatar {
+    width: 26px;
+    height: 26px;
+  }
+
+  .activity-module {
+    margin-left: 35px;
+  }
+
+  .plan-step__copy small {
+    white-space: normal;
+  }
+
+  .tools-module {
+    display: none;
+  }
+
+  .composer-dock {
+    padding: 0 8px 8px;
+  }
+
+  .composer {
+    min-height: 106px;
+  }
+
+  .composer textarea {
+    min-height: 54px;
+  }
+
+  .composer__toolbar {
+    padding-inline: 7px;
+  }
+
+  .branch-button,
+  .keyboard-hint {
+    display: none;
+  }
+
+  .inspector {
+    width: calc(100% - 54px);
+  }
+
+  .feature-panel {
+    padding: 18px 16px;
+  }
+
+  .feature-panel__header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .feature-panel__header .primary-button {
+    margin-left: 56px;
+  }
+
+  .settings-row {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+  }
+
+  .theme-control {
+    display: grid;
+    width: 100%;
+  }
+
+  .theme-control button {
+    min-width: 0;
+  }
+
+  .workspace-path {
+    grid-template-columns: 20px minmax(0, 1fr);
+  }
+
+  .workspace-path .secondary-button {
+    grid-column: 1 / -1;
+  }
+}

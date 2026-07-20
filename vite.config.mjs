@@ -1,0 +1,24 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+const host = process.env.TAURI_DEV_HOST;
+
+export default defineConfig(async () => ({
+  optimizeDeps: {
+    include: ["react", "react-dom/client", "@phosphor-icons/react"],
+  },
+  clearScreen: false,
+  server: {
+    host: host || "0.0.0.0",
+    port: 1420,
+    strictPort: true,
+    allowedHosts: ["terminal.local", ".localhost"],
+    warmup: {
+      clientFiles: ["./src/main.tsx"],
+    },
+    watch: {
+      ignored: ["**/src-tauri/**"],
+    },
+  },
+  plugins: [react()],
+}));
