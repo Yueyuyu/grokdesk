@@ -18,6 +18,12 @@ export interface RuntimeStatus {
   authFilePath: string | null;
 }
 
+export interface GrokSubscription {
+  tier: string | null;
+  creditUsagePercent: number | null;
+  periodEnd: string | null;
+}
+
 export interface ChatEntry {
   id: string;
   role: "user" | "agent";

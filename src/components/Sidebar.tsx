@@ -7,7 +7,6 @@ import {
   ShareNetwork,
   SlidersHorizontal,
 } from "@phosphor-icons/react";
-import avatar from "../assets/alex-chen.png";
 import appIcon from "../assets/grokdesk-icon.png";
 import { taskGroups } from "../data/demo";
 import type { NavigationKey, RuntimeStatus } from "../types";
@@ -98,10 +97,15 @@ export function Sidebar({
 
       <div className="sidebar__bottom">
         <button type="button" className="profile-row" onClick={() => onNavigate("settings")}>
-          <img src={avatar} alt="Alex Chen" />
+          <img src={appIcon} alt="" />
           <span>
-            <strong>Alex Chen</strong>
-            <small>Grok OAuth</small>
+            <strong>Grok account</strong>
+            <small>
+              {runtime?.authenticationState === "verified" ||
+              runtime?.authenticationState === "configured"
+                ? "Manage login & subscription"
+                : "Sign in & subscription"}
+            </small>
           </span>
           <CaretDown size={14} />
         </button>

@@ -1,6 +1,6 @@
 {
   "name": "grokdesk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "A polished native desktop client for Grok Build over ACP.",
   "type": "module",

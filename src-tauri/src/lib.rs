@@ -1,7 +1,8 @@
 mod grok_bridge;
 
 use grok_bridge::{
-    cancel_acp_turn, probe_runtime, respond_to_client_request, send_acp_prompt, start_acp_session,
+    cancel_acp_turn, fetch_grok_subscription, install_grok_cli, open_grok_subscription,
+    probe_runtime, respond_to_client_request, send_acp_prompt, start_acp_session,
     start_oauth_login, stop_acp_session, GrokBridge,
 };
 
@@ -17,6 +18,9 @@ pub fn run() {
             cancel_acp_turn,
             stop_acp_session,
             start_oauth_login,
+            install_grok_cli,
+            fetch_grok_subscription,
+            open_grok_subscription,
             respond_to_client_request,
         ])
         .run(tauri::generate_context!())

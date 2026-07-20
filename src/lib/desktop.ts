@@ -2,19 +2,33 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { RuntimeStatus } from "../types";
+import type { GrokSubscription, RuntimeStatus } from "../types";
+
+const PREVIEW_RUNTIME_KEY = "grokdesk.preview.runtime-installed";
+const PREVIEW_AUTH_KEY = "grokdesk.preview.oauth-complete";
+const SUBSCRIPTION_URL = "https://grok.com/supergrok?referrer=grok-build";
+
+const wait = (milliseconds: number) =>
+  new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+
+function previewRuntimeStatus(): RuntimeStatus {
+  const available = localStorage.getItem(PREVIEW_RUNTIME_KEY) === "true";
+  const authenticated = localStorage.getItem(PREVIEW_AUTH_KEY) === "true";
+
+  return {
+    available,
+    authenticationState: authenticated ? "verified" : "missing",
+    executablePath: available ? "%USERPROFILE%\\.grok\\bin\\grok.exe" : null,
+    version: available ? "grok 0.2.93 · preview simulation" : null,
+    authFilePath: authenticated ? "%USERPROFILE%\\.grok\\auth.json" : null,
+  };
+}
 
 export const isDesktopRuntime = () => isTauri();
 
 export async function probeRuntime(): Promise<RuntimeStatus> {
   if (!isDesktopRuntime()) {
-    return {
-      available: true,
-      authenticationState: "verified",
-      executablePath: "grok",
-      version: "grok 0.2.93 · browser demo",
-      authFilePath: null,
-    };
+    return previewRuntimeStatus();
   }
 
   return invoke<RuntimeStatus>("probe_runtime");
@@ -50,9 +64,46 @@ export async function stopAcpSession(): Promise<void> {
 
 export async function launchOAuth(): Promise<void> {
   if (!isDesktopRuntime()) {
+    if (localStorage.getItem(PREVIEW_RUNTIME_KEY) !== "true") {
+      throw new Error("Install the simulated Grok Runtime before previewing OAuth.");
+    }
+    await wait(450);
+    localStorage.setItem(PREVIEW_AUTH_KEY, "true");
     return;
   }
   await invoke("start_oauth_login");
+}
+
+export async function installGrokCli(): Promise<RuntimeStatus> {
+  if (!isDesktopRuntime()) {
+    await wait(650);
+    localStorage.setItem(PREVIEW_RUNTIME_KEY, "true");
+    return previewRuntimeStatus();
+  }
+  return invoke<RuntimeStatus>("install_grok_cli");
+}
+
+export async function fetchGrokSubscription(): Promise<GrokSubscription> {
+  if (!isDesktopRuntime()) {
+    if (localStorage.getItem(PREVIEW_AUTH_KEY) !== "true") {
+      throw new Error("Complete the simulated OAuth step before checking a subscription.");
+    }
+    await wait(350);
+    return {
+      tier: "Preview account",
+      creditUsagePercent: 24,
+      periodEnd: "2026-08-01T00:00:00Z",
+    };
+  }
+  return invoke<GrokSubscription>("fetch_grok_subscription");
+}
+
+export async function openGrokSubscription(): Promise<void> {
+  if (!isDesktopRuntime()) {
+    window.open(SUBSCRIPTION_URL, "_blank", "noopener,noreferrer");
+    return;
+  }
+  await invoke("open_grok_subscription");
 }
 
 export async function answerClientRequest(id: number, result: unknown): Promise<void> {

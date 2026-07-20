@@ -42,9 +42,47 @@ pub struct RuntimeStatus {
     auth_file_path: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrokSubscription {
+    tier: Option<String>,
+    credit_usage_percent: Option<f64>,
+    period_end: Option<String>,
+}
+
+fn subscription_from_billing(billing: &Value) -> GrokSubscription {
+    let config = billing.get("config");
+    GrokSubscription {
+        tier: billing
+            .get("subscriptionTier")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        credit_usage_percent: config
+            .and_then(|value| value.get("creditUsagePercent"))
+            .and_then(Value::as_f64),
+        period_end: config
+            .and_then(|value| {
+                value
+                    .pointer("/currentPeriod/end")
+                    .or_else(|| value.get("billingPeriodEnd"))
+            })
+            .and_then(Value::as_str)
+            .map(str::to_string),
+    }
+}
+
 fn grok_executable() -> Result<PathBuf, String> {
-    which::which("grok").map_err(|_| {
-        "Could not find the official `grok` executable on PATH. Install it from https://x.ai/cli."
+    if let Ok(path) = which::which("grok") {
+        return Ok(path);
+    }
+
+    let executable_name = if cfg!(windows) { "grok.exe" } else { "grok" };
+    let installed_path = dirs::home_dir()
+        .map(|home| home.join(".grok").join("bin").join(executable_name))
+        .filter(|path| path.is_file());
+
+    installed_path.ok_or_else(|| {
+        "Could not find the official `grok` executable. Install it from https://x.ai/cli."
             .to_string()
     })
 }
@@ -63,8 +101,7 @@ fn canonical_workspace(cwd: &str) -> Result<PathBuf, String> {
         .map_err(|error| format!("Workspace `{cwd}` is not accessible: {error}"))
 }
 
-#[tauri::command]
-pub async fn probe_runtime() -> RuntimeStatus {
+fn detect_runtime() -> RuntimeStatus {
     let executable = grok_executable().ok();
     let version = executable.as_ref().and_then(|path| {
         let mut command = std::process::Command::new(path);
@@ -95,6 +132,11 @@ pub async fn probe_runtime() -> RuntimeStatus {
         version,
         auth_file_path: auth_path.map(|path| path.to_string_lossy().into_owned()),
     }
+}
+
+#[tauri::command]
+pub async fn probe_runtime() -> RuntimeStatus {
+    detect_runtime()
 }
 
 impl GrokBridge {
@@ -287,9 +329,18 @@ pub async fn start_acp_session(
                 "clientCapabilities": {
                     "fs": { "readTextFile": false, "writeTextFile": false },
                     "terminal": false
+                },
+                "_meta": {
+                    "clientType": "grok-desktop",
+                    "clientVersion": env!("CARGO_PKG_VERSION"),
+                    "startupHints": {
+                        "nonInteractive": true,
+                        "skipGitStatus": true,
+                        "skipProjectLayout": true
+                    }
                 }
             }),
-            Duration::from_secs(30),
+            Duration::from_secs(90),
         )
         .await;
 
@@ -425,6 +476,158 @@ pub async fn start_oauth_login(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub async fn install_grok_cli(app: AppHandle) -> Result<RuntimeStatus, String> {
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Err("One-click Grok Runtime installation currently supports Windows only.".to_string())
+    }
+
+    #[cfg(windows)]
+    {
+        let _ = app.emit("grok://status", "Installing official Grok Runtime…");
+        let _ = app.emit(
+            "grok://install-log",
+            "[setup] Downloading the official installer from https://x.ai/cli/install.ps1",
+        );
+
+        let mut command = Command::new("powershell.exe");
+        command
+            .args([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                "$ProgressPreference='SilentlyContinue'; irm https://x.ai/cli/install.ps1 | iex",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        hide_console(&mut command);
+
+        let mut child = command
+            .spawn()
+            .map_err(|error| format!("Failed to start the official Grok installer: {error}"))?;
+
+        let stdout_task = child.stdout.take().map(|stdout| {
+            let app = app.clone();
+            tokio::spawn(async move {
+                let mut lines = BufReader::new(stdout).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    let _ = app.emit("grok://install-log", line);
+                }
+            })
+        });
+        let stderr_task = child.stderr.take().map(|stderr| {
+            let app = app.clone();
+            tokio::spawn(async move {
+                let mut lines = BufReader::new(stderr).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    let _ = app.emit("grok://install-log", line);
+                }
+            })
+        });
+
+        let status = child
+            .wait()
+            .await
+            .map_err(|error| format!("The official Grok installer could not finish: {error}"))?;
+        if let Some(task) = stdout_task {
+            let _ = task.await;
+        }
+        if let Some(task) = stderr_task {
+            let _ = task.await;
+        }
+
+        if !status.success() {
+            let _ = app.emit("grok://status", "Grok Runtime installation failed");
+            return Err(format!(
+                "The official Grok installer exited with status {status}."
+            ));
+        }
+
+        let runtime = detect_runtime();
+        if !runtime.available {
+            let _ = app.emit(
+                "grok://status",
+                "Grok Runtime was not detected after installation",
+            );
+            return Err(
+                "The installer completed, but GrokDesk could not find ~/.grok/bin/grok.exe."
+                    .to_string(),
+            );
+        }
+
+        let _ = app.emit(
+            "grok://install-log",
+            "[setup] Official Grok Runtime is ready.",
+        );
+        let status = if runtime.authentication_state == "configured" {
+            "Grok Build · OAuth configured"
+        } else {
+            "Grok Build · Sign in required"
+        };
+        let _ = app.emit("grok://status", status);
+        Ok(runtime)
+    }
+}
+
+#[tauri::command]
+pub async fn fetch_grok_subscription(
+    bridge: State<'_, GrokBridge>,
+) -> Result<GrokSubscription, String> {
+    if bridge.session_id.lock().await.is_none() {
+        return Err("Connect the official Grok ACP session before checking billing.".to_string());
+    }
+
+    let billing = bridge
+        .request("x.ai/billing", json!({}), Duration::from_secs(30))
+        .await?;
+
+    Ok(subscription_from_billing(&billing))
+}
+
+#[tauri::command]
+pub async fn open_grok_subscription() -> Result<(), String> {
+    const SUBSCRIPTION_URL: &str = "https://grok.com/supergrok?referrer=grok-build";
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("cmd.exe");
+        command.args(["/C", "start", "", SUBSCRIPTION_URL]);
+        hide_console(&mut command);
+        command
+    };
+
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg(SUBSCRIPTION_URL);
+        command
+    };
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(SUBSCRIPTION_URL);
+        command
+    };
+
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(false)
+        .spawn()
+        .map_err(|error| format!("Could not open the official SuperGrok page: {error}"))?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -449,5 +652,39 @@ mod tests {
         assert_eq!(value["executablePath"], "grok");
         assert_eq!(value["authenticationState"], "configured");
         assert!(value.get("executable_path").is_none());
+    }
+
+    #[test]
+    fn subscription_serializes_billing_fields() {
+        let value = serde_json::to_value(GrokSubscription {
+            tier: Some("SuperGrok".to_string()),
+            credit_usage_percent: Some(42.5),
+            period_end: Some("2026-08-01T00:00:00Z".to_string()),
+        })
+        .expect("subscription should serialize");
+
+        assert_eq!(value["tier"], "SuperGrok");
+        assert_eq!(value["creditUsagePercent"], 42.5);
+        assert_eq!(value["periodEnd"], "2026-08-01T00:00:00Z");
+    }
+
+    #[test]
+    fn subscription_projects_official_nested_billing_shape() {
+        let subscription = subscription_from_billing(&json!({
+            "subscriptionTier": "SuperGrok Heavy",
+            "config": {
+                "creditUsagePercent": 37.25,
+                "currentPeriod": {
+                    "end": "2026-08-08T00:00:00Z"
+                }
+            }
+        }));
+
+        assert_eq!(subscription.tier.as_deref(), Some("SuperGrok Heavy"));
+        assert_eq!(subscription.credit_usage_percent, Some(37.25));
+        assert_eq!(
+            subscription.period_end.as_deref(),
+            Some("2026-08-08T00:00:00Z")
+        );
     }
 }

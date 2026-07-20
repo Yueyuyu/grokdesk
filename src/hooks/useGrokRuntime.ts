@@ -9,9 +9,12 @@ import { normalizeSessionUpdate, planFromUpdate, toolFromUpdate } from "../lib/a
 import {
   answerClientRequest,
   cancelAcpTurn,
+  fetchGrokSubscription,
+  installGrokCli,
   isDesktopRuntime,
   launchOAuth,
   listenDesktopEvent,
+  openGrokSubscription,
   probeRuntime,
   sendAcpPrompt,
   startAcpSession,
@@ -19,6 +22,7 @@ import {
 } from "../lib/desktop";
 import type {
   ChatEntry,
+  GrokSubscription,
   PermissionOption,
   PermissionRequest,
   PlanStep,
@@ -47,17 +51,28 @@ const isAuthenticationError = (cause: unknown) =>
     String(cause),
   );
 
+const runtimeStatusText = (runtime: RuntimeStatus) =>
+  runtime.available
+    ? runtime.authenticationState === "verified"
+      ? "Grok Build · ACP ready"
+      : runtime.authenticationState === "configured"
+        ? "Grok Build · OAuth configured"
+        : "Grok Build · Sign in required"
+    : "Grok Build · Not installed";
+
 export function useGrokRuntime(workspacePath: string) {
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(
-    isDesktopRuntime() ? null : "browser-demo-session",
-  );
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatEntry[]>(initialMessages);
   const [plan, setPlan] = useState<PlanStep[]>(initialPlan);
   const [tools, setTools] = useState<ToolActivity[]>(initialTools);
   const [terminalLines, setTerminalLines] = useState<string[]>(terminalSeed);
   const [permission, setPermission] = useState<PermissionRequest | null>(null);
   const [busy, setBusy] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [subscription, setSubscription] = useState<GrokSubscription | null>(null);
   const [statusText, setStatusText] = useState("Inspecting Grok Build…");
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -67,15 +82,7 @@ export function useGrokRuntime(workspacePath: string) {
       const next = await probeRuntime();
       if (!mounted.current) return;
       setRuntime(next);
-      setStatusText(
-        next.available
-          ? next.authenticationState === "verified"
-            ? "Grok Build · ACP ready"
-            : next.authenticationState === "configured"
-              ? "Grok Build · OAuth configured"
-              : "Grok Build · Sign in required"
-          : "Grok Build · Not installed",
-      );
+      setStatusText(runtimeStatusText(next));
     } catch (cause) {
       if (!mounted.current) return;
       setError(String(cause));
@@ -164,8 +171,30 @@ export function useGrokRuntime(workspacePath: string) {
       listenDesktopEvent<string>("grok://stderr", (line) => {
         setTerminalLines((current) => [...current, line].slice(-120));
       }),
+      listenDesktopEvent<string>("grok://install-log", (line) => {
+        setTerminalLines((current) => [...current, line].slice(-120));
+      }),
       listenDesktopEvent<string>("grok://status", (status) => setStatusText(status)),
-      listenDesktopEvent<boolean>("grok://auth-complete", () => void refreshRuntime()),
+      listenDesktopEvent<boolean>("grok://auth-complete", (succeeded) => {
+        setSigningIn(false);
+        if (succeeded) {
+          void refreshRuntime();
+        } else {
+          setRuntime((current) =>
+            current
+              ? {
+                  ...current,
+                  authenticationState:
+                    current.authenticationState === "expired" ? "expired" : "missing",
+                }
+              : current,
+          );
+          setStatusText("Grok Build · Sign in required");
+          setError(
+            "Official Grok OAuth did not complete. You can try again from Settings.",
+          );
+        }
+      }),
     ];
 
     void Promise.all(subscriptions).then((items) => unlisteners.push(...items));
@@ -284,9 +313,82 @@ export function useGrokRuntime(workspacePath: string) {
     setStatusText("Grok Build · Turn cancelled");
   }, []);
 
+  const installRuntime = useCallback(async () => {
+    if (installing) return;
+    setInstalling(true);
+    setError(null);
+    setStatusText("Installing official Grok Runtime…");
+    if (!isDesktopRuntime()) {
+      setTerminalLines((current) => [
+        ...current,
+        "[preview] Simulating the official Grok Runtime installer. No software is changed.",
+      ]);
+    }
+
+    try {
+      const next = await installGrokCli();
+      setRuntime(next);
+      setStatusText(runtimeStatusText(next));
+      return next;
+    } catch (cause) {
+      setError(String(cause));
+      setStatusText("Grok Runtime installation failed");
+      throw cause;
+    } finally {
+      setInstalling(false);
+    }
+  }, [installing]);
+
   const signIn = useCallback(async () => {
+    if (signingIn) return;
+    setSigningIn(true);
+    setError(null);
     setStatusText("Opening official Grok OAuth…");
-    await launchOAuth();
+    try {
+      await launchOAuth();
+      if (!isDesktopRuntime()) {
+        const next = await probeRuntime();
+        setRuntime(next);
+        setSessionId("browser-demo-session");
+        setStatusText("Grok Build · Preview OAuth complete");
+        setTerminalLines((current) => [
+          ...current,
+          "[preview] OAuth completion was simulated. No account was accessed or changed.",
+        ]);
+        setSigningIn(false);
+      }
+    } catch (cause) {
+      setSigningIn(false);
+      setError(String(cause));
+      setStatusText("Grok Build · Sign in failed");
+      throw cause;
+    }
+  }, [signingIn]);
+
+  const verifySubscription = useCallback(async () => {
+    if (subscriptionLoading) return subscription;
+    setSubscriptionLoading(true);
+    setError(null);
+    try {
+      await connect();
+      const next = await fetchGrokSubscription();
+      setSubscription(next);
+      return next;
+    } catch (cause) {
+      setError(String(cause));
+      throw cause;
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  }, [connect, subscription, subscriptionLoading]);
+
+  const manageSubscription = useCallback(async () => {
+    try {
+      await openGrokSubscription();
+    } catch (cause) {
+      setError(String(cause));
+      throw cause;
+    }
   }, []);
 
   const answerPermission = useCallback(
@@ -316,13 +418,20 @@ export function useGrokRuntime(workspacePath: string) {
     terminalLines,
     permission,
     busy,
+    installing,
+    signingIn,
+    subscriptionLoading,
+    subscription,
     statusText,
     error,
     connect,
     disconnect,
     send,
     cancel,
+    installRuntime,
     signIn,
+    verifySubscription,
+    manageSubscription,
     answerPermission,
     refreshRuntime,
     clearTerminal: () => setTerminalLines([]),

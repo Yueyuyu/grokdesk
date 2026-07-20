@@ -15,17 +15,30 @@ GrokDesk 是一个面向 Windows 的开源桌面客户端，把官方 Grok Build
 - 拖动左右分栏，折叠检查器，并在窄屏下自动切换为抽屉式检查器。
 - 提供 Light、Dark、System 三套共享主题映射。
 - 通过官方 Grok CLI 登录和运行，不在 GrokDesk 中保存 OAuth Token。
+- 首次启动可一键安装官方 Grok Runtime，并直接进入官方 OAuth 与 SuperGrok 订阅入口。
+
+## 安装与首次启动
+
+从 [GitHub Releases](https://github.com/Yueyuyu/grokdesk/releases) 下载最新的 Windows `.exe` 安装包。安装完成后，GrokDesk 会自动创建桌面快捷方式。
+
+首次打开时按界面完成三步即可：
+
+1. 点击“安装 Runtime”，由 GrokDesk 执行 xAI 官方 HTTPS 安装脚本。
+2. 点击“使用 Grok 登录”，在官方 OAuth 页面登录或切换账号。
+3. 如需订阅，点击“查看方案”或在 Settings 中打开官方 SuperGrok 页面；登录后还可查询真实套餐和额度用量。
+
+不需要预先下载或手动打开 Grok Build。浏览器中的开发预览只模拟安装和登录状态，并会明确标注；真实安装与认证只发生在桌面应用中。
 
 ## 运行方式
 
 GrokDesk 不重新实现 Grok Build Agent。原生端会：
 
-1. 探测已安装的 grok 可执行文件及版本。
+1. 探测 grok 可执行文件及版本；缺失时可在界面内运行官方安装脚本。
 2. 通过官方命令 grok login --oauth 完成登录。
 3. 启动 grok agent stdio。
 4. 通过 ACP 执行 initialize、session/new、session/prompt，并处理流式 session/update、权限请求和取消。
 
-如果界面显示 “Sign in required”，请先在终端完成官方 CLI 登录：
+如果命令行环境需要手动登录，等价的官方命令是：
 
 ~~~powershell
 grok login --oauth
@@ -43,7 +56,7 @@ grok login --oauth
 
 ## 本地开发
 
-需要 Windows 10/11、Node.js 20+、Rust stable、Tauri 的 Windows 构建依赖，以及已安装的官方 grok CLI。
+需要 Windows 10/11、Node.js 20+、Rust stable 和 Tauri 的 Windows 构建依赖。官方 grok CLI 可由应用首次启动流程安装。
 
 ~~~powershell
 npm ci
@@ -76,13 +89,14 @@ npm run tauri:build
 
 - OAuth 凭据由官方 Grok CLI 管理。
 - GrokDesk 不读取、不展示，也不持久化 OAuth Token。
+- Runtime 安装只在用户点击后执行官方 `https://x.ai/cli/install.ps1` 脚本。
 - 工作区路径和任务内容只在用户触发 ACP 会话时发送给本机 Grok CLI。
 - 请勿把密钥、Token 或生产环境凭据提交到仓库。
 
 ## 当前限制
 
 - 目前优先支持 Windows 桌面端。
-- 必须已安装官方 grok CLI。
+- 一键 Runtime 安装目前仅在 Windows 桌面端提供。
 - 完整的真实提示流需要有效的 Grok OAuth 登录；登录过期时，ACP initialize 仍可成功，但 session/new 会被官方 CLI 拒绝。
 
 ## License

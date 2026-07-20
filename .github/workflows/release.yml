@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: 构建并发布 Windows 安装包
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 运行测试
+        run: npm test
+
+      - name: 运行 Tauri 原生端测试
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: 构建 NSIS 与 MSI 安装包
+        run: npm run tauri:build
+
+      - name: 生成校验文件并发布 Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assetPaths = Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -File |
+            Where-Object { $_.Extension -in ".exe", ".msi" } |
+            Select-Object -ExpandProperty FullName
+
+          if (-not $assetPaths) {
+            throw "未找到 Windows 安装包"
+          }
+
+          $checksumPath = Join-Path $env:RUNNER_TEMP "SHA256SUMS.txt"
+          $assetPaths |
+            ForEach-Object {
+              $hash = (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant()
+              "$hash  $(Split-Path -Leaf $_)"
+            } |
+            Set-Content -LiteralPath $checksumPath -Encoding utf8
+
+          $releaseAssets = @($assetPaths) + @($checksumPath)
+          gh release create $env:GITHUB_REF_NAME @releaseAssets `
+            --title "GrokDesk $env:GITHUB_REF_NAME" `
+            --generate-notes `
+            --verify-tag

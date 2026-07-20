@@ -35,3 +35,6 @@ jobs:
 
       - name: 检查 Tauri 原生端
         run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: 运行 Tauri 原生端测试
+        run: cargo test --manifest-path src-tauri/Cargo.toml

@@ -2,12 +2,14 @@ import { CaretLeft, SidebarSimple } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { FeaturePanel } from "./components/FeaturePanel";
 import { Inspector } from "./components/Inspector";
+import { OnboardingPanel } from "./components/OnboardingPanel";
 import { PermissionDialog } from "./components/PermissionDialog";
 import { Sidebar } from "./components/Sidebar";
 import { TaskWorkspace } from "./components/TaskWorkspace";
 import { TitleBar } from "./components/TitleBar";
 import { useGrokRuntime } from "./hooks/useGrokRuntime";
-import { chooseWorkspace } from "./lib/desktop";
+import { chooseWorkspace, isDesktopRuntime } from "./lib/desktop";
+import { getRuntimeSetupStep } from "./lib/runtime";
 import type { InspectorTab, NavigationKey, ThemePreference } from "./types";
 
 const clamp = (value: number, minimum: number, maximum: number) =>
@@ -60,6 +62,8 @@ export function App() {
   );
 
   const grok = useGrokRuntime(workspacePath);
+  const setupStep = getRuntimeSetupStep(grok.runtime);
+  const preview = !isDesktopRuntime();
 
   useEffect(() => {
     const apply = () => document.documentElement.setAttribute("data-theme", getResolvedTheme(theme));
@@ -116,19 +120,32 @@ export function App() {
         />
 
         {activeNavigation === "tasks" ? (
-          <TaskWorkspace
-            messages={grok.messages}
-            plan={grok.plan}
-            tools={grok.tools}
-            busy={grok.busy}
-            onSend={grok.send}
-            onCancel={grok.cancel}
-            onRunTests={() => void grok.send("Run the relevant tests for the OAuth session changes and report any failures.")}
-            onReviewChanges={() => {
-              setInspectorCollapsed(false);
-              setInspectorTab("changes");
-            }}
-          />
+          setupStep === "ready" ? (
+            <TaskWorkspace
+              messages={grok.messages}
+              plan={grok.plan}
+              tools={grok.tools}
+              busy={grok.busy}
+              onSend={grok.send}
+              onCancel={grok.cancel}
+              onRunTests={() => void grok.send("Run the relevant tests for the OAuth session changes and report any failures.")}
+              onReviewChanges={() => {
+                setInspectorCollapsed(false);
+                setInspectorTab("changes");
+              }}
+            />
+          ) : (
+            <OnboardingPanel
+              runtime={grok.runtime}
+              installing={grok.installing}
+              signingIn={grok.signingIn}
+              preview={preview}
+              onInstall={grok.installRuntime}
+              onSignIn={grok.signIn}
+              onManageSubscription={grok.manageSubscription}
+              onOpenSettings={() => setActiveNavigation("settings")}
+            />
+          )
         ) : (
           <FeaturePanel
             kind={activeNavigation}
@@ -137,10 +154,18 @@ export function App() {
             workspacePath={workspacePath}
             onChooseWorkspace={() => void pickWorkspace()}
             runtime={grok.runtime}
+            subscription={grok.subscription}
             connected={Boolean(grok.sessionId)}
+            installing={grok.installing}
+            signingIn={grok.signingIn}
+            subscriptionLoading={grok.subscriptionLoading}
+            preview={preview}
             onConnect={grok.connect}
             onDisconnect={grok.disconnect}
+            onInstall={grok.installRuntime}
             onSignIn={grok.signIn}
+            onVerifySubscription={grok.verifySubscription}
+            onManageSubscription={grok.manageSubscription}
           />
         )}
 
