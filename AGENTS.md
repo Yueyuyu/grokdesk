@@ -14,6 +14,9 @@ When implementing from a selected generated mock, treat that image as the source
 - Use true white for the main task surface, cool gray for navigation, and a subtle cool tint for the inspector. Blue is the persistent primary/action color; green is success-only.
 - The desktop shell is Tauri + React. Use the installed official `grok` binary through `grok agent stdio`; do not reimplement the Grok Build agent or store OAuth tokens in this project.
 - Authentication stays with the official CLI through `grok login --oauth`.
+- After browser OAuth succeeds, the initiating desktop client must show an explicit success result, restart ACP so it reads the new credentials, and refresh all account information that the official CLI exposes. Do not rely solely on a fire-and-forget desktop event for login completion.
+- GrokDesk is single-instance. Opening the desktop shortcut again must focus the existing window so OAuth completion and account state cannot land in a different app process.
+- Never fabricate subscription tier or quota values. If the installed official CLI does not expose billing data, show that limitation explicitly and link users to the official SuperGrok management page.
 - Windows installation automatically creates a GrokDesk desktop shortcut; shortcut presence is part of release verification.
 - The Windows shortcut must use a versioned `.ico` path bundled beside the executable so Explorer cannot reuse stale icon-cache pixels. Release verification must inspect the icon as rendered on the real desktop, not only the source file's alpha channel.
 - First launch must offer one-click installation of the official Grok Runtime so users do not need to open a terminal first.

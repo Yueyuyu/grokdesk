@@ -44,7 +44,7 @@ export function OnboardingPanel({
         <header className="onboarding-header">
           <img src={appIcon} alt="" />
           <div>
-            <span>GrokDesk v0.1.5</span>
+            <span>GrokDesk v0.1.6</span>
             <h1 id="onboarding-title">三步开始使用 GrokDesk</h1>
             <p>
               不需要先打开终端。GrokDesk 可以安装官方 Grok Runtime，随后直接跳转到官方 OAuth 登录。
@@ -118,7 +118,7 @@ export function OnboardingPanel({
             <span className="setup-list__icon"><CreditCard size={20} /></span>
             <div>
               <strong>查看或升级订阅（可选）</strong>
-              <p>打开官方 SuperGrok 页面；登录完成后可在 Settings 查看账号套餐与用量。</p>
+              <p>打开官方 SuperGrok 页面查看套餐与用量；Settings 会显示客户端能够验证到的账号状态。</p>
             </div>
             <button
               type="button"

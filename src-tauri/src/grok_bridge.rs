@@ -15,7 +15,7 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, Command},
     sync::{oneshot, Mutex},
-    time::timeout,
+    time::{sleep, timeout},
 };
 
 #[cfg(windows)]
@@ -45,14 +45,16 @@ pub struct RuntimeStatus {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GrokSubscription {
+    availability: String,
     tier: Option<String>,
     credit_usage_percent: Option<f64>,
     period_end: Option<String>,
+    message: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct OAuthResult {
+pub struct OAuthResult {
     succeeded: bool,
     message: Option<String>,
 }
@@ -60,6 +62,7 @@ struct OAuthResult {
 fn subscription_from_billing(billing: &Value) -> GrokSubscription {
     let config = billing.get("config");
     GrokSubscription {
+        availability: "available".to_string(),
         tier: billing
             .get("subscriptionTier")
             .and_then(Value::as_str)
@@ -75,7 +78,25 @@ fn subscription_from_billing(billing: &Value) -> GrokSubscription {
             })
             .and_then(Value::as_str)
             .map(str::to_string),
+        message: None,
     }
+}
+
+fn unsupported_subscription() -> GrokSubscription {
+    GrokSubscription {
+        availability: "unsupported".to_string(),
+        tier: None,
+        credit_usage_percent: None,
+        period_end: None,
+        message: Some(
+            "登录已验证，但当前官方 Grok CLI 未开放套餐与额度查询；请在 SuperGrok 官方页面查看。"
+                .to_string(),
+        ),
+    }
+}
+
+fn billing_method_unavailable(error: &str) -> bool {
+    error.contains("-32601") || error.to_ascii_lowercase().contains("method not found")
 }
 
 fn grok_executable() -> Result<PathBuf, String> {
@@ -326,6 +347,16 @@ fn detect_runtime() -> RuntimeStatus {
         version,
         auth_file_path: auth_path.map(|path| path.to_string_lossy().into_owned()),
     }
+}
+
+async fn wait_for_configured_credentials() -> bool {
+    for _ in 0..20 {
+        if detect_runtime().authentication_state == "configured" {
+            return true;
+        }
+        sleep(Duration::from_millis(250)).await;
+    }
+    false
 }
 
 #[tauri::command]
@@ -635,7 +666,7 @@ pub async fn respond_to_client_request(
 }
 
 #[tauri::command]
-pub async fn start_oauth_login(app: AppHandle) -> Result<(), String> {
+pub async fn start_oauth_login(app: AppHandle) -> Result<OAuthResult, String> {
     let executable = grok_executable()?;
     let mut command = Command::new(executable);
     command
@@ -673,26 +704,27 @@ pub async fn start_oauth_login(app: AppHandle) -> Result<(), String> {
         ))
     });
 
-    tokio::spawn(async move {
-        let process_succeeded = child.wait().await.is_ok_and(|status| status.success());
-        if let Some(task) = stdout_task {
-            let _ = task.await;
-        }
-        if let Some(task) = stderr_task {
-            let _ = task.await;
-        }
+    let process_succeeded = child.wait().await.is_ok_and(|status| status.success());
+    if let Some(task) = stdout_task {
+        let _ = task.await;
+    }
+    if let Some(task) = stderr_task {
+        let _ = task.await;
+    }
 
-        let credentials_created = detect_runtime().authentication_state == "configured";
-        let succeeded = process_succeeded && credentials_created;
-        let message = if succeeded {
-            None
-        } else {
-            Some(oauth_failure_message(&output_lines.lock().await))
-        };
-        let _ = app.emit("grok://auth-complete", OAuthResult { succeeded, message });
-    });
+    // The official CLI owns credential persistence. Wait briefly for its atomic
+    // auth-file replacement to become visible before reporting the result.
+    let credentials_created = wait_for_configured_credentials().await;
+    let succeeded = process_succeeded && credentials_created;
+    let message = if succeeded {
+        let _ = app.emit("grok://status", "Grok 登录成功，正在刷新账号与订阅…");
+        None
+    } else {
+        let _ = app.emit("grok://status", "Grok 登录未完成");
+        Some(oauth_failure_message(&output_lines.lock().await))
+    };
 
-    Ok(())
+    Ok(OAuthResult { succeeded, message })
 }
 
 #[tauri::command]
@@ -803,11 +835,14 @@ pub async fn fetch_grok_subscription(
         return Err("Connect the official Grok ACP session before checking billing.".to_string());
     }
 
-    let billing = bridge
+    match bridge
         .request("x.ai/billing", json!({}), Duration::from_secs(30))
-        .await?;
-
-    Ok(subscription_from_billing(&billing))
+        .await
+    {
+        Ok(billing) => Ok(subscription_from_billing(&billing)),
+        Err(error) if billing_method_unavailable(&error) => Ok(unsupported_subscription()),
+        Err(error) => Err(error),
+    }
 }
 
 #[tauri::command]
@@ -846,12 +881,15 @@ mod tests {
     #[test]
     fn subscription_serializes_billing_fields() {
         let value = serde_json::to_value(GrokSubscription {
+            availability: "available".to_string(),
             tier: Some("SuperGrok".to_string()),
             credit_usage_percent: Some(42.5),
             period_end: Some("2026-08-01T00:00:00Z".to_string()),
+            message: None,
         })
         .expect("subscription should serialize");
 
+        assert_eq!(value["availability"], "available");
         assert_eq!(value["tier"], "SuperGrok");
         assert_eq!(value["creditUsagePercent"], 42.5);
         assert_eq!(value["periodEnd"], "2026-08-01T00:00:00Z");
@@ -875,6 +913,23 @@ mod tests {
             subscription.period_end.as_deref(),
             Some("2026-08-08T00:00:00Z")
         );
+        assert_eq!(subscription.availability, "available");
+        assert!(subscription.message.is_none());
+    }
+
+    #[test]
+    fn reports_removed_billing_method_as_unsupported() {
+        assert!(billing_method_unavailable(
+            r#"{"code":-32601,"message":"Method not found"}"#
+        ));
+
+        let subscription = unsupported_subscription();
+        assert_eq!(subscription.availability, "unsupported");
+        assert!(subscription.tier.is_none());
+        assert!(subscription
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("官方 Grok CLI")));
     }
 
     #[test]

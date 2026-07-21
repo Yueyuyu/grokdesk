@@ -36,11 +36,6 @@ interface ClientRequestPayload {
   params?: Record<string, unknown>;
 }
 
-interface OAuthResultPayload {
-  succeeded: boolean;
-  message?: string | null;
-}
-
 const formatTime = () =>
   new Intl.DateTimeFormat("en", {
     hour: "2-digit",
@@ -80,7 +75,13 @@ export function useGrokRuntime(workspacePath: string) {
   const [subscription, setSubscription] = useState<GrokSubscription | null>(null);
   const [statusText, setStatusText] = useState("Inspecting Grok Build…");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const mounted = useRef(true);
+  const accountAutoRefreshStarted = useRef(false);
+
+  const showNotice = useCallback((message: string) => {
+    setNotice(message);
+  }, []);
 
   const refreshRuntime = useCallback(async () => {
     try {
@@ -88,10 +89,12 @@ export function useGrokRuntime(workspacePath: string) {
       if (!mounted.current) return;
       setRuntime(next);
       setStatusText(runtimeStatusText(next));
+      return next;
     } catch (cause) {
       if (!mounted.current) return;
       setError(String(cause));
       setStatusText("Grok Build · Detection failed");
+      return null;
     }
   }, []);
 
@@ -100,6 +103,7 @@ export function useGrokRuntime(workspacePath: string) {
     void refreshRuntime();
 
     const unlisteners: Array<() => void> = [];
+    let disposed = false;
     const subscriptions = [
       listenDesktopEvent<unknown>("grok://session-update", (payload) => {
         const update = normalizeSessionUpdate(payload);
@@ -180,41 +184,32 @@ export function useGrokRuntime(workspacePath: string) {
         setTerminalLines((current) => [...current, line].slice(-120));
       }),
       listenDesktopEvent<string>("grok://status", (status) => setStatusText(status)),
-      listenDesktopEvent<OAuthResultPayload>("grok://auth-complete", ({ succeeded, message }) => {
-        setSigningIn(false);
-        if (succeeded) {
-          void refreshRuntime();
-        } else {
-          setRuntime((current) =>
-            current
-              ? {
-                  ...current,
-                  authenticationState:
-                    current.authenticationState === "expired" ? "expired" : "missing",
-                }
-              : current,
-          );
-          setStatusText("Grok Build · Sign in required");
-          setError(
-            message || "官方 Grok 登录没有完成，请从 Settings 重新尝试。",
-          );
-        }
-      }),
     ];
 
-    void Promise.all(subscriptions).then((items) => unlisteners.push(...items));
+    void Promise.all(subscriptions).then((items) => {
+      if (disposed) {
+        items.forEach((unlisten) => unlisten());
+      } else {
+        unlisteners.push(...items);
+      }
+    });
 
     return () => {
+      disposed = true;
       mounted.current = false;
       unlisteners.forEach((unlisten) => unlisten());
     };
   }, [refreshRuntime]);
 
-  const connect = useCallback(async () => {
-    if (sessionId) return sessionId;
+  const connect = useCallback(async (restart = false) => {
+    if (sessionId && !restart) return sessionId;
     setError(null);
     setStatusText("Starting Grok Build ACP…");
     try {
+      if (restart) {
+        await stopAcpSession();
+        setSessionId(null);
+      }
       const nextSession = await startAcpSession(workspacePath || ".");
       setSessionId(nextSession);
       setRuntime((current) =>
@@ -344,40 +339,21 @@ export function useGrokRuntime(workspacePath: string) {
     }
   }, [installing]);
 
-  const signIn = useCallback(async () => {
-    if (signingIn) return;
-    setSigningIn(true);
-    setError(null);
-    setStatusText("Opening official Grok OAuth…");
-    try {
-      await launchOAuth();
-      if (!isDesktopRuntime()) {
-        const next = await probeRuntime();
-        setRuntime(next);
-        setSessionId("browser-demo-session");
-        setStatusText("Grok Build · Preview OAuth complete");
-        setTerminalLines((current) => [
-          ...current,
-          "[preview] OAuth completion was simulated. No account was accessed or changed.",
-        ]);
-        setSigningIn(false);
-      }
-    } catch (cause) {
-      setSigningIn(false);
-      setError(String(cause));
-      setStatusText("Grok Build · Sign in failed");
-      throw cause;
-    }
-  }, [signingIn]);
-
   const verifySubscription = useCallback(async () => {
     if (subscriptionLoading) return subscription;
     setSubscriptionLoading(true);
     setError(null);
+    setNotice(null);
     try {
       await connect();
       const next = await fetchGrokSubscription();
       setSubscription(next);
+      setStatusText("Grok Build · 账号状态已刷新");
+      showNotice(
+        next.availability === "unsupported"
+          ? next.message || "登录已验证，但当前官方 Grok CLI 未开放套餐与额度查询。"
+          : "账号、套餐与额度已刷新。",
+      );
       return next;
     } catch (cause) {
       setError(String(cause));
@@ -385,7 +361,93 @@ export function useGrokRuntime(workspacePath: string) {
     } finally {
       setSubscriptionLoading(false);
     }
-  }, [connect, subscription, subscriptionLoading]);
+  }, [connect, showNotice, subscription, subscriptionLoading]);
+
+  const signIn = useCallback(async () => {
+    if (signingIn) return;
+    setSigningIn(true);
+    setSubscriptionLoading(false);
+    setError(null);
+    setNotice(null);
+    setStatusText("Opening official Grok OAuth…");
+
+    try {
+      const result = await launchOAuth();
+      if (!result.succeeded) {
+        throw new Error(result.message || "官方 Grok 登录没有完成，请重新尝试。");
+      }
+
+      const nextRuntime = await probeRuntime();
+      if (
+        nextRuntime.authenticationState === "missing" ||
+        nextRuntime.authenticationState === "expired"
+      ) {
+        throw new Error("网页授权已结束，但官方 Grok CLI 尚未写入登录凭据。");
+      }
+      setRuntime(nextRuntime);
+      setStatusText("Grok 登录成功，正在刷新账号与订阅…");
+      showNotice("Grok 登录成功，正在刷新账号与订阅…");
+
+      if (!isDesktopRuntime()) {
+        setSessionId("browser-demo-session");
+        const nextSubscription = await fetchGrokSubscription();
+        setSubscription(nextSubscription);
+        setStatusText("Grok Build · Preview OAuth complete");
+        setTerminalLines((current) => [
+          ...current,
+          "[preview] OAuth completion was simulated. No account was accessed or changed.",
+        ]);
+        showNotice("预览登录成功，模拟套餐与额度已刷新。");
+        return;
+      }
+
+      try {
+        // A fresh ACP process must read the credentials written by this OAuth attempt.
+        await connect(true);
+        setSubscriptionLoading(true);
+        const nextSubscription = await fetchGrokSubscription();
+        setSubscription(nextSubscription);
+        setStatusText("Grok Build · 已登录并验证");
+        showNotice(
+          nextSubscription.availability === "unsupported"
+            ? nextSubscription.message ||
+                "登录已验证，但当前官方 Grok CLI 未开放套餐与额度查询。"
+            : "Grok 登录成功，套餐与额度已自动刷新。",
+        );
+      } catch (refreshCause) {
+        setStatusText("Grok Build · OAuth configured");
+        setError(`Grok 登录成功，但账号信息刷新失败：${String(refreshCause)}`);
+        showNotice("Grok 登录成功；账号详情可稍后点击“刷新账号与订阅”重试。");
+      }
+    } catch (cause) {
+      setNotice(null);
+      setError(String(cause));
+      setStatusText("Grok Build · Sign in failed");
+      throw cause;
+    } finally {
+      setSubscriptionLoading(false);
+      setSigningIn(false);
+    }
+  }, [connect, showNotice, signingIn]);
+
+  useEffect(() => {
+    const authenticationReady =
+      runtime?.available === true &&
+      runtime.authenticationState !== "missing" &&
+      runtime.authenticationState !== "expired";
+    if (
+      !authenticationReady ||
+      signingIn ||
+      subscriptionLoading ||
+      subscription ||
+      accountAutoRefreshStarted.current
+    ) {
+      return;
+    }
+
+    accountAutoRefreshStarted.current = true;
+    void verifySubscription().catch(() => undefined);
+  }, [runtime, signingIn, subscription, subscriptionLoading, verifySubscription]);
 
   const manageSubscription = useCallback(async () => {
     try {
@@ -429,6 +491,8 @@ export function useGrokRuntime(workspacePath: string) {
     subscription,
     statusText,
     error,
+    notice,
+    dismissNotice: () => setNotice(null),
     connect,
     disconnect,
     send,

@@ -11,6 +11,11 @@ const SUBSCRIPTION_URL = "https://grok.com/supergrok?referrer=grok-build";
 const wait = (milliseconds: number) =>
   new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
+export interface OAuthResult {
+  succeeded: boolean;
+  message: string | null;
+}
+
 function previewRuntimeStatus(): RuntimeStatus {
   const available = localStorage.getItem(PREVIEW_RUNTIME_KEY) === "true";
   const authenticated = localStorage.getItem(PREVIEW_AUTH_KEY) === "true";
@@ -62,16 +67,16 @@ export async function stopAcpSession(): Promise<void> {
   await invoke("stop_acp_session");
 }
 
-export async function launchOAuth(): Promise<void> {
+export async function launchOAuth(): Promise<OAuthResult> {
   if (!isDesktopRuntime()) {
     if (localStorage.getItem(PREVIEW_RUNTIME_KEY) !== "true") {
       throw new Error("Install the simulated Grok Runtime before previewing OAuth.");
     }
     await wait(450);
     localStorage.setItem(PREVIEW_AUTH_KEY, "true");
-    return;
+    return { succeeded: true, message: null };
   }
-  await invoke("start_oauth_login");
+  return invoke<OAuthResult>("start_oauth_login");
 }
 
 export async function installGrokCli(): Promise<RuntimeStatus> {
@@ -90,9 +95,11 @@ export async function fetchGrokSubscription(): Promise<GrokSubscription> {
     }
     await wait(350);
     return {
+      availability: "available",
       tier: "Preview account",
       creditUsagePercent: 24,
       periodEnd: "2026-08-01T00:00:00Z",
+      message: null,
     };
   }
   return invoke<GrokSubscription>("fetch_grok_subscription");

@@ -19,9 +19,11 @@ export interface RuntimeStatus {
 }
 
 export interface GrokSubscription {
+  availability: "available" | "unsupported";
   tier: string | null;
   creditUsagePercent: number | null;
   periodEnd: string | null;
+  message: string | null;
 }
 
 export interface ChatEntry {

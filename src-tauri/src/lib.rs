@@ -1,5 +1,7 @@
 mod grok_bridge;
 
+use tauri::Manager;
+
 use grok_bridge::{
     cancel_acp_turn, fetch_grok_subscription, install_grok_cli, open_grok_subscription,
     probe_runtime, respond_to_client_request, send_acp_prompt, start_acp_session,
@@ -9,6 +11,13 @@ use grok_bridge::{
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .manage(GrokBridge::default())
         .invoke_handler(tauri::generate_handler![

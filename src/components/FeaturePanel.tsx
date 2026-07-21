@@ -7,6 +7,7 @@ import {
   FolderOpen,
   GithubLogo,
   Globe,
+  Info,
   PlugsConnected,
   PuzzlePiece,
   ShieldCheck,
@@ -88,7 +89,13 @@ export function FeaturePanel({
     canUseAccount &&
     authenticationState !== "missing" &&
     authenticationState !== "expired";
-  const periodEnd = formatPeriodEnd(subscription?.periodEnd);
+  const subscriptionUnavailable = subscription?.availability === "unsupported";
+  const subscriptionPlaceholder = subscriptionUnavailable
+    ? "官方 CLI 暂不提供"
+    : "尚未查询";
+  const periodEnd = subscriptionUnavailable
+    ? subscriptionPlaceholder
+    : formatPeriodEnd(subscription?.periodEnd);
 
   if (kind === "plugins") {
     return (
@@ -140,7 +147,7 @@ export function FeaturePanel({
     <main className="feature-panel feature-panel--settings">
       <header className="feature-panel__header">
         <div><h1>Settings</h1><p>Runtime、Grok 账号、订阅与界面偏好。</p></div>
-        <span className="version-chip">GrokDesk v0.1.5</span>
+        <span className="version-chip">GrokDesk v0.1.6</span>
       </header>
 
       {preview ? (
@@ -214,10 +221,16 @@ export function FeaturePanel({
             </span>
           </div>
           <dl>
-            <div><dt>当前套餐</dt><dd>{subscription?.tier || "尚未查询"}</dd></div>
-            <div><dt>额度用量</dt><dd>{formatCreditUsage(subscription?.creditUsagePercent ?? null)}</dd></div>
+            <div><dt>当前套餐</dt><dd>{subscription?.tier || subscriptionPlaceholder}</dd></div>
+            <div><dt>额度用量</dt><dd>{subscriptionUnavailable ? subscriptionPlaceholder : formatCreditUsage(subscription?.creditUsagePercent ?? null)}</dd></div>
             <div><dt>本周期结束</dt><dd>{periodEnd}</dd></div>
           </dl>
+          {subscription?.message ? (
+            <div className="account-summary__notice" role="status">
+              <Info size={16} />
+              <span>{subscription.message}</span>
+            </div>
+          ) : null}
           <div className="runtime-summary__actions account-summary__actions">
             <button
               type="button"
@@ -239,7 +252,7 @@ export function FeaturePanel({
               onClick={() => void onVerifySubscription().catch(() => undefined)}
             >
               <ArrowClockwise size={16} />
-              {subscriptionLoading ? "正在验证…" : "验证账号与订阅"}
+              {subscriptionLoading ? "正在刷新…" : "刷新账号与订阅"}
             </button>
             <button
               type="button"

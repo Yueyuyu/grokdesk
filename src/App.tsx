@@ -198,6 +198,12 @@ export function App() {
       </div>
 
       {grok.error ? <div className="error-toast" role="alert">{grok.error}</div> : null}
+      {grok.notice ? (
+        <div className="status-toast" role="status" aria-live="polite">
+          <span>{grok.notice}</span>
+          <button type="button" onClick={grok.dismissNotice} aria-label="关闭提示">×</button>
+        </div>
+      ) : null}
       {grok.permission ? (
         <PermissionDialog request={grok.permission} onAnswer={grok.answerPermission} />
       ) : null}
