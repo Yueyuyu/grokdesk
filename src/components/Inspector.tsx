@@ -1,5 +1,7 @@
-import { CaretLeft, GitDiff, Trash } from "@phosphor-icons/react";
+import { CaretLeft, Trash } from "@phosphor-icons/react";
+import type { WorkspaceChangesController } from "../hooks/useWorkspaceChanges";
 import type { GrokTask, InspectorTab } from "../types";
+import { WorkspaceChangesPanel } from "./WorkspaceChangesPanel";
 
 interface InspectorProps {
   activeTab: InspectorTab;
@@ -10,6 +12,8 @@ interface InspectorProps {
   sessionId: string | null;
   task: GrokTask | null;
   workspacePath: string;
+  workspace: WorkspaceChangesController;
+  onChooseWorkspace: () => void;
 }
 
 const tabLabels: Record<InspectorTab, string> = {
@@ -27,6 +31,8 @@ export function Inspector({
   sessionId,
   task,
   workspacePath,
+  workspace,
+  onChooseWorkspace,
 }: InspectorProps) {
   return (
     <aside className="inspector" aria-label="Task inspector">
@@ -60,16 +66,10 @@ export function Inspector({
       </div>
 
       {activeTab === "changes" ? (
-        <div className="inspector-empty-state">
-          <span>
-            <GitDiff size={23} />
-          </span>
-          <strong>No verified changes yet</strong>
-          <p>
-            Real workspace Git status and diffs will appear here after the Git
-            inspector is connected.
-          </p>
-        </div>
+        <WorkspaceChangesPanel
+          workspace={workspace}
+          onChooseWorkspace={onChooseWorkspace}
+        />
       ) : null}
 
       {activeTab === "terminal" ? (
@@ -122,6 +122,20 @@ export function Inspector({
               <div>
                 <dt>Workspace</dt>
                 <dd title={workspacePath}>{workspacePath}</dd>
+              </div>
+              <div>
+                <dt>Repository</dt>
+                <dd title={workspace.snapshot.repositoryRoot ?? undefined}>
+                  {workspace.snapshot.repositoryRoot || "Not detected"}
+                </dd>
+              </div>
+              <div>
+                <dt>Branch</dt>
+                <dd>{workspace.snapshot.branch || "Not detected"}</dd>
+              </div>
+              <div>
+                <dt>Git changes</dt>
+                <dd>{workspace.snapshot.changes.length}</dd>
               </div>
               <div>
                 <dt>Messages</dt>

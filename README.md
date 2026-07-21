@@ -9,10 +9,12 @@ GrokDesk 是一个面向 Windows 的开源桌面客户端，通过 ACP 把官方
 
 ## 能做什么
 
-- 新建和切换多个真实任务，并按工作区在本机持久化任务标题、对话、计划和工具活动。
+- 新建、搜索、重命名、删除和切换多个真实任务，并按工作区在本机持久化任务标题、对话、计划和工具活动。
 - 为每个任务保存官方 ACP Session ID，重启或切回任务时通过 `session/load` 恢复 Grok Build 上下文。
-- 发送新指令、接收流式回复、自动滚动到最新回复、取消当前回合并处理 ACP 权限确认。
-- 在 Changes、Terminal、Context 之间切换；Terminal 与 Context 已接入真实状态，Changes 会在 Git 集成完成前明确显示未接入状态。
+- 发送新指令、接收流式回复、自动滚动到最新回复、取消或重试当前回合，并处理 ACP 权限确认与失败后的会话重连。
+- 显式选择并记住项目文件夹；没有选定文件夹时不会把程序当前目录当成工作区。
+- 在 Changes 中读取真实 Git 状态和统一 Diff，可将单个文件接受到 Git 暂存区、撤销接受，或在二次确认后回滚该文件。
+- 在 Changes、Terminal、Context 之间切换；Terminal、Context、Git 分支、仓库根目录和变更数量均来自真实状态。
 - 拖动左右分栏，折叠检查器，并在窄屏下自动切换为抽屉式检查器。
 - 提供 Light、Dark、System 三套共享主题映射。
 - 通过官方 Grok CLI 登录和运行，不在 GrokDesk 中保存 OAuth Token。
@@ -91,6 +93,7 @@ npm run tauri:build
 - GrokDesk 不读取、不展示，也不持久化 OAuth Token。
 - Runtime 安装只在用户点击后执行官方 `https://x.ai/cli/install.ps1` 脚本。
 - 工作区路径和任务内容只在用户触发 ACP 会话时发送给本机 Grok CLI。
+- Git 状态、Diff 和单文件审核动作由本机 GrokDesk 原生端执行，不上传到 GrokDesk 服务。
 - 请勿把密钥、Token 或生产环境凭据提交到仓库。
 
 ## 当前限制
@@ -98,7 +101,8 @@ npm run tauri:build
 - 目前优先支持 Windows 桌面端。
 - 一键 Runtime 安装目前仅在 Windows 桌面端提供。
 - 完整的真实提示流需要有效的 Grok OAuth 登录；登录过期时，ACP initialize 仍可成功，但 session/new 会被官方 CLI 拒绝。
-- Git status/diff、测试结果采集、附件、插件发现和 MCP 配置尚未接入；相关页面不会展示虚构数据。
+- Changes 需要所选文件夹位于 Git 仓库内；“接受”表示 `git add` 当前文件，“回滚”会丢弃该文件的工作区修改或删除未跟踪文件，因此始终要求二次确认。
+- 测试结果结构化采集、附件、插件发现和 MCP 配置尚未接入；相关页面不会展示虚构数据。
 - 套餐与额度只在官方 Grok CLI 实际提供 billing 数据时显示，否则使用官方 SuperGrok 管理入口。
 
 ## License

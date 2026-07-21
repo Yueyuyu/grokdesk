@@ -5,8 +5,10 @@ import {
   Code,
   FileText,
   Flask,
+  FolderOpen,
   PencilSimple,
   Play,
+  ArrowClockwise,
   SpinnerGap,
   UserCircle,
   Wrench,
@@ -21,6 +23,10 @@ interface TaskWorkspaceProps {
   busy: boolean;
   onSend: (text: string) => Promise<void>;
   onCancel: () => Promise<void>;
+  onRetry: () => Promise<void>;
+  workspaceReady: boolean;
+  onChooseWorkspace: () => void;
+  workspaceChangeCount: number;
   onRunTests: () => void;
   onReviewChanges: () => void;
 }
@@ -140,6 +146,10 @@ export function TaskWorkspace({
   busy,
   onSend,
   onCancel,
+  onRetry,
+  workspaceReady,
+  onChooseWorkspace,
+  workspaceChangeCount,
   onRunTests,
   onReviewChanges,
 }: TaskWorkspaceProps) {
@@ -169,22 +179,37 @@ export function TaskWorkspace({
     <main className="task-workspace">
       <header className="task-header">
         <div>
-          <h1>{task?.title ?? "Preparing task…"}</h1>
+          <h1>{workspaceReady ? task?.title ?? "Preparing task…" : "Choose a project folder"}</h1>
           <p>
             Grok Build <span>·</span> ACP <span>·</span>{" "}
             <strong
               className={`task-status task-status--${task?.status ?? "idle"}`}
             >
-              {task ? statusLabels[task.status] : "Loading"}
+              {!workspaceReady
+                ? "Workspace required"
+                : task
+                  ? statusLabels[task.status]
+                  : "Loading"}
             </strong>
           </p>
         </div>
         <div className="task-header__actions">
+          {task?.status === "error" ? (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void onRetry()}
+              disabled={busy || !workspaceReady}
+            >
+              <ArrowClockwise size={16} />
+              Retry
+            </button>
+          ) : null}
           <button
             type="button"
             className="secondary-button"
             onClick={onRunTests}
-            disabled={!task || busy}
+            disabled={!task || busy || !workspaceReady}
           >
             <Play size={16} />
             Run tests
@@ -195,14 +220,26 @@ export function TaskWorkspace({
             onClick={onReviewChanges}
           >
             <Code size={16} />
-            Review changes
+            Review changes{workspaceChangeCount > 0 ? ` · ${workspaceChangeCount}` : ""}
           </button>
         </div>
       </header>
 
       <div className="conversation-scroll" ref={scrollArea}>
         <div className="conversation">
-          {messages.length === 0 ? (
+          {!workspaceReady ? (
+            <section className="conversation-empty" aria-label="Choose workspace">
+              <span>
+                <FolderOpen size={24} />
+              </span>
+              <h2>Open a project workspace</h2>
+              <p>Grok Build will run only inside the folder you explicitly choose.</p>
+              <button type="button" className="primary-button" onClick={onChooseWorkspace}>
+                <FolderOpen size={15} />
+                Choose folder
+              </button>
+            </section>
+          ) : messages.length === 0 ? (
             <section className="conversation-empty" aria-label="New task">
               <span>
                 <ChatCircleDots size={24} />
@@ -227,7 +264,7 @@ export function TaskWorkspace({
       <div className="composer-dock">
         <Composer
           busy={busy}
-          disabled={!task}
+          disabled={!task || !workspaceReady}
           onSend={onSend}
           onCancel={onCancel}
         />

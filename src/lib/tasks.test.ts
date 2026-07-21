@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   createTask,
+  deleteTask,
   deriveTaskTitle,
   emptyTaskStore,
   ensureWorkspaceTask,
+  filterTasks,
   groupTasks,
   parseTaskStore,
+  renameTask,
   serializeTaskStore,
   workspaceStorageKey,
 } from "./tasks";
@@ -80,6 +83,60 @@ describe("task presentation", () => {
     );
     expect(deriveTaskTitle("这是一个需要自动截断的很长很长很长任务", 12)).toBe(
       "这是一个需要自动截断的…",
+    );
+  });
+
+  it("searches task titles and saved transcript content", () => {
+    const oauthTask = {
+      ...createTask("C:\\work\\app", { id: "oauth" }),
+      title: "Refresh OAuth",
+    };
+    const diffTask = {
+      ...createTask("C:\\work\\app", { id: "diff" }),
+      title: "Workspace review",
+      messages: [
+        {
+          id: "message-1",
+          role: "user" as const,
+          name: "You",
+          time: "10:00",
+          content: "Show the unified patch",
+        },
+      ],
+    };
+
+    expect(filterTasks([oauthTask, diffTask], "oauth").map((task) => task.id)).toEqual([
+      "oauth",
+    ]);
+    expect(filterTasks([oauthTask, diffTask], "PATCH").map((task) => task.id)).toEqual([
+      "diff",
+    ]);
+  });
+
+  it("renames and deletes tasks while preserving one active workspace task", () => {
+    const workspace = "C:\\work\\app";
+    const first = createTask(workspace, {
+      id: "first",
+      now: new Date("2026-07-21T01:00:00.000Z"),
+    });
+    const renamed = renameTask(
+      {
+        version: 1,
+        tasks: [first],
+        activeTaskIds: { [workspaceStorageKey(workspace)]: first.id },
+      },
+      first.id,
+      "  Reviewed   workspace  ",
+    );
+    expect(renamed.tasks[0].title).toBe("Reviewed workspace");
+
+    const deleted = deleteTask(renamed, first.id, workspace, {
+      replacementId: "replacement",
+      now: new Date("2026-07-21T02:00:00.000Z"),
+    });
+    expect(deleted.tasks.map((task) => task.id)).toEqual(["replacement"]);
+    expect(deleted.activeTaskIds[workspaceStorageKey(workspace)]).toBe(
+      "replacement",
     );
   });
 

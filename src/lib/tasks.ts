@@ -247,6 +247,77 @@ export function createTask(
   };
 }
 
+export function filterTasks(tasks: GrokTask[], query: string) {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return tasks;
+
+  return tasks.filter((task) => {
+    if (task.title.toLocaleLowerCase().includes(normalized)) return true;
+    return task.messages.some((message) =>
+      message.content.toLocaleLowerCase().includes(normalized),
+    );
+  });
+}
+
+export function renameTask(
+  snapshot: TaskStoreSnapshot,
+  taskId: string,
+  title: string,
+) {
+  const normalized = title.replace(/\s+/g, " ").trim().slice(0, 160);
+  if (!normalized) return snapshot;
+
+  let changed = false;
+  const tasks = snapshot.tasks.map((task) => {
+    if (task.id !== taskId || task.title === normalized) return task;
+    changed = true;
+    return { ...task, title: normalized, updatedAt: new Date().toISOString() };
+  });
+  return changed ? { ...snapshot, tasks } : snapshot;
+}
+
+export function deleteTask(
+  snapshot: TaskStoreSnapshot,
+  taskId: string,
+  workspacePath: string,
+  options: { replacementId?: string; now?: Date } = {},
+) {
+  const workspaceKey = workspaceStorageKey(workspacePath);
+  const target = snapshot.tasks.find(
+    (task) =>
+      task.id === taskId &&
+      workspaceStorageKey(task.workspacePath) === workspaceKey,
+  );
+  if (!target) return snapshot;
+
+  let tasks = snapshot.tasks.filter((task) => task.id !== taskId);
+  let workspaceTasks = tasks
+    .filter((task) => workspaceStorageKey(task.workspacePath) === workspaceKey)
+    .sort(
+      (left, right) =>
+        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+    );
+
+  if (workspaceTasks.length === 0) {
+    const replacement = createTask(workspacePath, {
+      id: options.replacementId,
+      now: options.now,
+    });
+    tasks = [replacement, ...tasks].slice(0, MAX_TASKS);
+    workspaceTasks = [replacement];
+  }
+
+  const activeTaskIds = { ...snapshot.activeTaskIds };
+  if (
+    activeTaskIds[workspaceKey] === taskId ||
+    !workspaceTasks.some((task) => task.id === activeTaskIds[workspaceKey])
+  ) {
+    activeTaskIds[workspaceKey] = workspaceTasks[0].id;
+  }
+
+  return { ...snapshot, tasks, activeTaskIds };
+}
+
 export function ensureWorkspaceTask(
   snapshot: TaskStoreSnapshot,
   workspacePath: string,

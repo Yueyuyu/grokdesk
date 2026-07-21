@@ -10,6 +10,7 @@ import {
   UserCircle,
 } from "@phosphor-icons/react";
 import { formatCreditUsage, getAuthenticationLabel } from "../lib/runtime";
+import { isWorkspaceSelected } from "../lib/workspace";
 import type { GrokSubscription, RuntimeStatus, ThemePreference } from "../types";
 
 interface FeaturePanelProps {
@@ -68,6 +69,7 @@ export function FeaturePanel({
     connected,
   );
   const canUseAccount = runtime?.available === true;
+  const workspaceReady = isWorkspaceSelected(workspacePath);
   const canVerifyAccount =
     canUseAccount &&
     authenticationState !== "missing" &&
@@ -75,7 +77,9 @@ export function FeaturePanel({
   const subscriptionUnavailable = subscription?.availability === "unsupported";
   const subscriptionPlaceholder = subscriptionUnavailable
     ? "官方 CLI 暂不提供"
-    : "尚未查询";
+    : canVerifyAccount && !workspaceReady
+      ? "选择工作区后查询"
+      : "尚未查询";
   const periodEnd = subscriptionUnavailable
     ? subscriptionPlaceholder
     : formatPeriodEnd(subscription?.periodEnd);
@@ -116,7 +120,7 @@ export function FeaturePanel({
     <main className="feature-panel feature-panel--settings">
       <header className="feature-panel__header">
         <div><h1>Settings</h1><p>Runtime、Grok 账号、订阅与界面偏好。</p></div>
-        <span className="version-chip">GrokDesk v0.1.7</span>
+        <span className="version-chip">GrokDesk v0.1.8</span>
       </header>
 
       {preview ? (
@@ -140,7 +144,7 @@ export function FeaturePanel({
         <h2>Workspace</h2>
         <div className="workspace-path">
           <FolderOpen size={18} />
-          <span title={workspacePath}>{workspacePath}</span>
+          <span title={workspacePath || undefined}>{workspacePath || "No project folder selected"}</span>
           <button type="button" className="secondary-button" onClick={onChooseWorkspace}>Choose folder</button>
         </div>
       </section>
@@ -170,7 +174,7 @@ export function FeaturePanel({
             <button
               type="button"
               className="secondary-button"
-              disabled={!canVerifyAccount}
+              disabled={!canVerifyAccount || (!connected && !workspaceReady)}
               onClick={() => void (connected ? onDisconnect() : onConnect()).catch(() => undefined)}
             >
               {connected ? "断开 ACP" : "连接 ACP"}
@@ -194,7 +198,12 @@ export function FeaturePanel({
             <div><dt>额度用量</dt><dd>{subscriptionUnavailable ? subscriptionPlaceholder : formatCreditUsage(subscription?.creditUsagePercent ?? null)}</dd></div>
             <div><dt>本周期结束</dt><dd>{periodEnd}</dd></div>
           </dl>
-          {subscription?.message ? (
+          {canVerifyAccount && !workspaceReady ? (
+            <div className="account-summary__notice" role="status">
+              <Info size={16} />
+              <span>登录已完成。选择项目文件夹后，GrokDesk 会启动 ACP 并自动刷新账号信息。</span>
+            </div>
+          ) : subscription?.message ? (
             <div className="account-summary__notice" role="status">
               <Info size={16} />
               <span>{subscription.message}</span>
@@ -217,7 +226,7 @@ export function FeaturePanel({
             <button
               type="button"
               className="secondary-button"
-              disabled={!canVerifyAccount || subscriptionLoading}
+              disabled={!canVerifyAccount || !workspaceReady || subscriptionLoading}
               onClick={() => void onVerifySubscription().catch(() => undefined)}
             >
               <ArrowClockwise size={16} />

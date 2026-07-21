@@ -245,6 +245,38 @@
     width: calc(100% - 54px);
   }
 
+  .inspector__content--changes {
+    grid-template-rows: auto minmax(105px, 22%) minmax(180px, 1fr) auto auto auto;
+    gap: 7px;
+    padding: 7px;
+  }
+
+  .workspace-branch {
+    display: none;
+  }
+
+  .change-review-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .change-review-bar small {
+    white-space: normal;
+  }
+
+  .change-review-bar__actions {
+    justify-content: flex-end;
+  }
+
+  .change-confirmation {
+    grid-template-columns: 20px minmax(0, 1fr);
+  }
+
+  .change-confirmation button {
+    grid-column: 2;
+    justify-self: start;
+  }
+
   .feature-panel {
     padding: 18px 16px;
   }

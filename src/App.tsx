@@ -1,4 +1,4 @@
-import { CaretLeft, SidebarSimple } from "@phosphor-icons/react";
+import { CaretLeft, SidebarSimple, X } from "@phosphor-icons/react";
 import {
   useEffect,
   useMemo,
@@ -15,8 +15,10 @@ import { TaskWorkspace } from "./components/TaskWorkspace";
 import { TitleBar } from "./components/TitleBar";
 import { useGrokRuntime } from "./hooks/useGrokRuntime";
 import { useTaskStore } from "./hooks/useTaskStore";
+import { useWorkspaceChanges } from "./hooks/useWorkspaceChanges";
 import { chooseWorkspace, isDesktopRuntime } from "./lib/desktop";
 import { getRuntimeSetupStep } from "./lib/runtime";
+import { isWorkspaceSelected } from "./lib/workspace";
 import type { InspectorTab, NavigationKey, ThemePreference } from "./types";
 
 const clamp = (value: number, minimum: number, maximum: number) =>
@@ -71,13 +73,14 @@ export function App() {
   const [sidebarWidth, setSidebarWidth] = useState(268);
   const [inspectorWidth, setInspectorWidth] = useState(392);
   const [workspacePath, setWorkspacePath] = useState(
-    () => localStorage.getItem("grokdesk.workspace") || ".",
+    () => localStorage.getItem("grokdesk.workspace") || "",
   );
   const [theme, setTheme] = useState<ThemePreference>(
     () =>
       (localStorage.getItem("grokdesk.theme") as ThemePreference | null) ||
       "light",
   );
+  const workspaceReady = isWorkspaceSelected(workspacePath);
 
   const taskStore = useTaskStore(workspacePath);
   const grok = useGrokRuntime(
@@ -85,6 +88,7 @@ export function App() {
     taskStore.activeTask,
     taskStore.updateTask,
   );
+  const workspace = useWorkspaceChanges(workspacePath, grok.busy);
   const setupStep = getRuntimeSetupStep(grok.runtime);
   const preview = !isDesktopRuntime();
 
@@ -110,7 +114,7 @@ export function App() {
   }, []);
 
   const workspaceLabel = useMemo(() => {
-    if (!workspacePath || workspacePath === ".") return "Current workspace";
+    if (!isWorkspaceSelected(workspacePath)) return "Choose workspace";
     const parts = workspacePath.split(/[\\/]/).filter(Boolean);
     return parts.slice(-2).join("/") || workspacePath;
   }, [workspacePath]);
@@ -145,7 +149,7 @@ export function App() {
           onStatusClick={() => setActiveNavigation("settings")}
           tasks={taskStore.tasks}
           activeTaskId={taskStore.activeTaskId}
-          taskSwitchDisabled={grok.busy}
+          taskSwitchDisabled={grok.busy || !workspaceReady}
           onCreateTask={() => {
             taskStore.createTask();
             setActiveNavigation("tasks");
@@ -153,6 +157,13 @@ export function App() {
           onSelectTask={(taskId) => {
             taskStore.selectTask(taskId);
             setActiveNavigation("tasks");
+          }}
+          onRenameTask={taskStore.renameTask}
+          onDeleteTask={async (taskId) => {
+            if (taskId === taskStore.activeTaskId && grok.sessionId) {
+              await grok.disconnect();
+            }
+            taskStore.deleteTask(taskId);
           }}
         />
         <Resizer
@@ -169,6 +180,10 @@ export function App() {
               busy={grok.busy}
               onSend={grok.send}
               onCancel={grok.cancel}
+              onRetry={grok.retry}
+              workspaceReady={workspaceReady}
+              onChooseWorkspace={() => void pickWorkspace()}
+              workspaceChangeCount={workspace.snapshot.changes.length}
               onRunTests={() =>
                 void grok.send(
                   "Run the relevant tests for the current changes and report any failures.",
@@ -231,6 +246,8 @@ export function App() {
               sessionId={grok.sessionId}
               task={taskStore.activeTask}
               workspacePath={workspacePath}
+              workspace={workspace}
+              onChooseWorkspace={() => void pickWorkspace()}
             />
           </>
         ) : (
@@ -248,7 +265,10 @@ export function App() {
 
       {grok.error ? (
         <div className="error-toast" role="alert">
-          {grok.error}
+          <span>{grok.error}</span>
+          <button type="button" onClick={grok.dismissError} aria-label="Dismiss error">
+            <X size={13} />
+          </button>
         </div>
       ) : null}
       {grok.notice ? (

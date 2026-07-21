@@ -2,7 +2,17 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { GrokSubscription, RuntimeStatus } from "../types";
+import type {
+  GrokSubscription,
+  RuntimeStatus,
+  WorkspaceDiff,
+  WorkspaceSnapshot,
+} from "../types";
+import {
+  applyPreviewWorkspaceAction,
+  getPreviewWorkspaceDiff,
+  getPreviewWorkspaceSnapshot,
+} from "./workspace";
 
 const PREVIEW_RUNTIME_KEY = "grokdesk.preview.runtime-installed";
 const PREVIEW_AUTH_KEY = "grokdesk.preview.oauth-complete";
@@ -133,10 +143,58 @@ export async function answerClientRequest(id: number, result: unknown): Promise<
 
 export async function chooseWorkspace(): Promise<string | null> {
   if (!isDesktopRuntime()) {
-    return null;
+    await wait(180);
+    return "C:\\Preview\\grokdesk-sample";
   }
   const selected = await open({ directory: true, multiple: false });
   return typeof selected === "string" ? selected : null;
+}
+
+export async function inspectWorkspace(cwd: string): Promise<WorkspaceSnapshot> {
+  if (!isDesktopRuntime()) {
+    return getPreviewWorkspaceSnapshot(cwd);
+  }
+  return invoke<WorkspaceSnapshot>("inspect_workspace", { cwd });
+}
+
+export async function getWorkspaceDiff(
+  cwd: string,
+  path: string,
+): Promise<WorkspaceDiff> {
+  if (!isDesktopRuntime()) {
+    return getPreviewWorkspaceDiff(path);
+  }
+  return invoke<WorkspaceDiff>("get_workspace_diff", { cwd, path });
+}
+
+export async function stageWorkspaceChange(
+  cwd: string,
+  path: string,
+): Promise<WorkspaceSnapshot> {
+  if (!isDesktopRuntime()) {
+    return applyPreviewWorkspaceAction("stage", cwd, path);
+  }
+  return invoke<WorkspaceSnapshot>("stage_workspace_change", { cwd, path });
+}
+
+export async function unstageWorkspaceChange(
+  cwd: string,
+  path: string,
+): Promise<WorkspaceSnapshot> {
+  if (!isDesktopRuntime()) {
+    return applyPreviewWorkspaceAction("unstage", cwd, path);
+  }
+  return invoke<WorkspaceSnapshot>("unstage_workspace_change", { cwd, path });
+}
+
+export async function discardWorkspaceChange(
+  cwd: string,
+  path: string,
+): Promise<WorkspaceSnapshot> {
+  if (!isDesktopRuntime()) {
+    return applyPreviewWorkspaceAction("discard", cwd, path);
+  }
+  return invoke<WorkspaceSnapshot>("discard_workspace_change", { cwd, path });
 }
 
 export function listenDesktopEvent<T>(

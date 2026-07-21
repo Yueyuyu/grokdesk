@@ -1,4 +1,5 @@
 mod grok_bridge;
+mod workspace;
 
 use tauri::Manager;
 
@@ -6,6 +7,10 @@ use grok_bridge::{
     cancel_acp_turn, fetch_grok_subscription, install_grok_cli, open_grok_subscription,
     probe_runtime, respond_to_client_request, send_acp_prompt, start_acp_session,
     start_oauth_login, stop_acp_session, GrokBridge,
+};
+use workspace::{
+    discard_workspace_change, get_workspace_diff, inspect_workspace, stage_workspace_change,
+    unstage_workspace_change,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -31,6 +36,11 @@ pub fn run() {
             fetch_grok_subscription,
             open_grok_subscription,
             respond_to_client_request,
+            inspect_workspace,
+            get_workspace_diff,
+            stage_workspace_change,
+            unstage_workspace_change,
+            discard_workspace_change,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run GrokDesk");

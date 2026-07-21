@@ -22,3 +22,5 @@ When implementing from a selected generated mock, treat that image as the source
 - First launch must offer one-click installation of the official Grok Runtime so users do not need to open a terminal first.
 - Grok OAuth login and SuperGrok subscription management must remain visible in onboarding and Settings.
 - Browser previews must clearly identify simulated install/login data and must never default to a fake signed-in state.
+- v0.1.8 establishes the real workspace review loop: users explicitly choose a project folder; Git status and unified diffs come from that folder; accepting stages only the selected file; undoing acceptance unstages it; reverting is always confirmed and never performs an automatic bulk rollback.
+- The Changes inspector must state that it includes every Git change in the workspace, including edits that may predate the active Grok task. Development-only simulated changes must be explicitly labeled and must never ship as default product data.

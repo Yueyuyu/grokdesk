@@ -70,6 +70,41 @@ export interface ChangedFile {
   status: "M" | "A" | "D";
 }
 
+export type WorkspaceSnapshotMode =
+  | "git"
+  | "not_git"
+  | "unselected"
+  | "preview_unavailable"
+  | "preview_simulation";
+
+export interface WorkspaceChange {
+  path: string;
+  originalPath: string | null;
+  statusCode: "M" | "A" | "D" | "R" | "C" | "T" | "?" | "!";
+  staged: boolean;
+  unstaged: boolean;
+  indexStatus: string | null;
+  worktreeStatus: string | null;
+}
+
+export interface WorkspaceSnapshot {
+  mode: WorkspaceSnapshotMode;
+  repositoryRoot: string | null;
+  branch: string | null;
+  changes: WorkspaceChange[];
+  message: string | null;
+}
+
+export interface WorkspaceDiff {
+  path: string;
+  statusCode: WorkspaceChange["statusCode"];
+  staged: boolean;
+  unstaged: boolean;
+  patch: string;
+  binary: boolean;
+  truncated: boolean;
+}
+
 export interface DiffLine {
   oldNumber?: number;
   newNumber?: number;

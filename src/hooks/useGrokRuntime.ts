@@ -15,6 +15,7 @@ import {
   stopAcpSession,
 } from "../lib/desktop";
 import { deriveTaskTitle, NEW_TASK_TITLE } from "../lib/tasks";
+import { isWorkspaceSelected } from "../lib/workspace";
 import type { UpdateTask } from "./useTaskStore";
 import type {
   ChatEntry,
@@ -289,6 +290,12 @@ export function useGrokRuntime(
         const resumeSessionId =
           task.acpSessionId ??
           (restart && currentTaskId === task.id ? currentSessionId : null);
+        const taskWorkspace = isWorkspaceSelected(task.workspacePath)
+          ? task.workspacePath
+          : workspacePath;
+        if (!isWorkspaceSelected(taskWorkspace)) {
+          throw new Error("Choose a project folder before starting Grok Build.");
+        }
 
         try {
           if (currentSessionId) {
@@ -300,7 +307,7 @@ export function useGrokRuntime(
           sessionTaskIdRef.current = task.id;
           ignoreSessionUpdatesRef.current = Boolean(resumeSessionId);
           const nextSessionId = await startAcpSession(
-            task.workspacePath || workspacePath || ".",
+            taskWorkspace,
             resumeSessionId,
           );
           setConnectedSession(nextSessionId, task.id);
@@ -359,7 +366,13 @@ export function useGrokRuntime(
       runtime?.available === true &&
       runtime.authenticationState !== "missing" &&
       runtime.authenticationState !== "expired";
-    if (!activeTask?.id || !authenticationReady || signingIn || busy) return;
+    if (
+      !activeTask?.id ||
+      !isWorkspaceSelected(workspacePath) ||
+      !authenticationReady ||
+      signingIn ||
+      busy
+    ) return;
 
     const task = activeTaskRef.current;
     if (task) void connectTask(task).catch(() => undefined);
@@ -459,6 +472,11 @@ export function useGrokRuntime(
         setTerminalLines((current) =>
           [...current, `[error] ${String(cause)}`].slice(-120),
         );
+        if (isDesktopRuntime()) {
+          await stopAcpSession().catch(() => undefined);
+          setConnectedSession(null, null);
+          setStatusText("Grok Build · Ready to retry");
+        }
       } finally {
         const cancelled = turnCancelledRef.current;
         updateTask(taskId, (current) => ({
@@ -473,8 +491,21 @@ export function useGrokRuntime(
         setBusy(false);
       }
     },
-    [busy, connectTask, runBrowserDemo, updateTask],
+    [busy, connectTask, runBrowserDemo, setConnectedSession, updateTask],
   );
+
+  const retry = useCallback(async () => {
+    const task = activeTaskRef.current;
+    const previousPrompt = task?.messages
+      .slice()
+      .reverse()
+      .find((entry) => entry.role === "user")?.content;
+    if (!previousPrompt) {
+      setError("There is no previous prompt to retry.");
+      return;
+    }
+    await send(previousPrompt);
+  }, [send]);
 
   const cancel = useCallback(async () => {
     const taskId = sessionTaskIdRef.current;
@@ -554,6 +585,8 @@ export function useGrokRuntime(
     if (signingIn) return;
     setSigningIn(true);
     setSubscriptionLoading(false);
+    setSubscription(null);
+    accountAutoRefreshStarted.current = false;
     setError(null);
     setNotice(null);
     setStatusText("Opening official Grok OAuth…");
@@ -578,6 +611,14 @@ export function useGrokRuntime(
       setRuntime(nextRuntime);
       setStatusText("Grok sign-in succeeded. Refreshing account information…");
       showNotice("Grok sign-in succeeded. Refreshing account information…");
+
+      if (!isWorkspaceSelected(workspacePath) || !activeTaskRef.current) {
+        setStatusText("Grok Build · Signed in · Choose a workspace");
+        showNotice(
+          "Grok sign-in succeeded. Choose a project folder to start ACP and refresh account information.",
+        );
+        return;
+      }
 
       try {
         // A fresh ACP process must read the credentials written by this OAuth attempt.
@@ -616,7 +657,7 @@ export function useGrokRuntime(
       setSubscriptionLoading(false);
       setSigningIn(false);
     }
-  }, [connect, showNotice, signingIn]);
+  }, [connect, showNotice, signingIn, workspacePath]);
 
   useEffect(() => {
     const authenticationReady =
@@ -624,6 +665,8 @@ export function useGrokRuntime(
       runtime.authenticationState !== "missing" &&
       runtime.authenticationState !== "expired";
     if (
+      !activeTask?.id ||
+      !isWorkspaceSelected(workspacePath) ||
       !authenticationReady ||
       signingIn ||
       subscriptionLoading ||
@@ -635,7 +678,7 @@ export function useGrokRuntime(
 
     accountAutoRefreshStarted.current = true;
     void verifySubscription().catch(() => undefined);
-  }, [runtime, signingIn, subscription, subscriptionLoading, verifySubscription]);
+  }, [activeTask?.id, runtime, signingIn, subscription, subscriptionLoading, verifySubscription, workspacePath]);
 
   const manageSubscription = useCallback(async () => {
     try {
@@ -692,6 +735,7 @@ export function useGrokRuntime(
     connect,
     disconnect,
     send,
+    retry,
     cancel,
     installRuntime,
     signIn,
@@ -700,5 +744,6 @@ export function useGrokRuntime(
     answerPermission,
     refreshRuntime,
     clearTerminal: () => setTerminalLines([]),
+    dismissError: () => setError(null),
   };
 }

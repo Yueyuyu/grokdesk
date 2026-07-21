@@ -94,7 +94,8 @@ input {
 }
 
 .primary-button,
-.secondary-button {
+.secondary-button,
+.danger-button {
   display: inline-flex;
   min-height: 36px;
   align-items: center;
@@ -128,6 +129,17 @@ input {
 .secondary-button:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--text-secondary) 52%, var(--border));
   background: var(--bg-hover);
+}
+
+.danger-button {
+  border: 1px solid color-mix(in srgb, var(--red) 48%, var(--border));
+  background: var(--bg-elevated);
+  color: var(--red);
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: var(--red);
+  background: var(--red-soft);
 }
 
 .status-dot {
