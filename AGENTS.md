@@ -15,6 +15,7 @@ When implementing from a selected generated mock, treat that image as the source
 - The desktop shell is Tauri + React. Use the installed official `grok` binary through `grok agent stdio`; do not reimplement the Grok Build agent or store OAuth tokens in this project.
 - Authentication stays with the official CLI through `grok login --oauth`.
 - Windows installation automatically creates a GrokDesk desktop shortcut; shortcut presence is part of release verification.
+- The Windows shortcut must use a versioned `.ico` path bundled beside the executable so Explorer cannot reuse stale icon-cache pixels. Release verification must inspect the icon as rendered on the real desktop, not only the source file's alpha channel.
 - First launch must offer one-click installation of the official Grok Runtime so users do not need to open a terminal first.
 - Grok OAuth login and SuperGrok subscription management must remain visible in onboarding and Settings.
 - Browser previews must clearly identify simulated install/login data and must never default to a fake signed-in state.
