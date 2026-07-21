@@ -39,11 +39,21 @@ export async function probeRuntime(): Promise<RuntimeStatus> {
   return invoke<RuntimeStatus>("probe_runtime");
 }
 
-export async function startAcpSession(cwd: string): Promise<string> {
+export async function startAcpSession(
+  cwd: string,
+  resumeSessionId: string | null = null,
+): Promise<string> {
   if (!isDesktopRuntime()) {
-    return "browser-demo-session";
+    return (
+      resumeSessionId ??
+      `browser-preview-${
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : Date.now()
+      }`
+    );
   }
-  return invoke<string>("start_acp_session", { cwd });
+  return invoke<string>("start_acp_session", { cwd, resumeSessionId });
 }
 
 export async function sendAcpPrompt(text: string): Promise<void> {
@@ -95,11 +105,12 @@ export async function fetchGrokSubscription(): Promise<GrokSubscription> {
     }
     await wait(350);
     return {
-      availability: "available",
-      tier: "Preview account",
-      creditUsagePercent: 24,
-      periodEnd: "2026-08-01T00:00:00Z",
-      message: null,
+      availability: "unsupported",
+      tier: null,
+      creditUsagePercent: null,
+      periodEnd: null,
+      message:
+        "Browser preview only: no real Grok account, subscription, or quota data is available.",
     };
   }
   return invoke<GrokSubscription>("fetch_grok_subscription");

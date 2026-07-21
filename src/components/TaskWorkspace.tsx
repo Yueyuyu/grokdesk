@@ -1,24 +1,23 @@
 import {
   CaretRight,
+  ChatCircleDots,
   Check,
   Code,
   FileText,
   Flask,
-  GitBranch,
   PencilSimple,
   Play,
   SpinnerGap,
+  UserCircle,
   Wrench,
 } from "@phosphor-icons/react";
-import avatar from "../assets/alex-chen.png";
+import { useEffect, useRef } from "react";
 import appIcon from "../assets/grokdesk-icon.png";
-import type { ChatEntry, PlanStep, ToolActivity } from "../types";
+import type { ChatEntry, GrokTask, PlanStep, ToolActivity } from "../types";
 import { Composer } from "./Composer";
 
 interface TaskWorkspaceProps {
-  messages: ChatEntry[];
-  plan: PlanStep[];
-  tools: ToolActivity[];
+  task: GrokTask | null;
   busy: boolean;
   onSend: (text: string) => Promise<void>;
   onCancel: () => Promise<void>;
@@ -30,18 +29,29 @@ function Message({ entry }: { entry: ChatEntry }) {
   const isAgent = entry.role === "agent";
   return (
     <article className={`message message--${entry.role}`}>
-      <img
-        src={isAgent ? appIcon : avatar}
-        alt={isAgent ? "Grok Build" : "Alex"}
-        className={`message__avatar ${isAgent ? "message__avatar--agent" : ""}`}
-      />
+      {isAgent ? (
+        <img
+          src={appIcon}
+          alt="Grok Build"
+          className="message__avatar message__avatar--agent"
+        />
+      ) : (
+        <span
+          className="message__avatar message__avatar--user"
+          aria-hidden="true"
+        >
+          <UserCircle size={23} weight="regular" />
+        </span>
+      )}
       <div className="message__body">
         <header>
           <strong>{entry.name}</strong>
           <time>{entry.time}</time>
         </header>
         <p>{entry.content || (entry.streaming ? "Thinking…" : "")}</p>
-        {entry.streaming ? <span className="streaming-caret" aria-label="Streaming" /> : null}
+        {entry.streaming ? (
+          <span className="streaming-caret" aria-label="Streaming" />
+        ) : null}
       </div>
     </article>
   );
@@ -67,7 +77,7 @@ function PlanCard({ steps }: { steps: PlanStep[] }) {
             </span>
             <span className="plan-step__copy">
               <strong>{step.title}</strong>
-              <small>{step.detail}</small>
+              {step.detail ? <small>{step.detail}</small> : null}
             </span>
           </li>
         ))}
@@ -108,72 +118,106 @@ function ToolsCard({ tools }: { tools: ToolActivity[] }) {
           );
         })}
         {tools.length > 5 ? (
-          <button type="button" className="tool-more">
+          <span className="tool-more">
             {tools.length - 5} more
             <CaretRight size={11} weight="bold" />
-          </button>
+          </span>
         ) : null}
       </div>
     </section>
   );
 }
 
+const statusLabels: Record<GrokTask["status"], string> = {
+  idle: "Ready",
+  running: "Working",
+  complete: "Complete",
+  error: "Needs attention",
+};
+
 export function TaskWorkspace({
-  messages,
-  plan,
-  tools,
+  task,
   busy,
   onSend,
   onCancel,
   onRunTests,
   onReviewChanges,
 }: TaskWorkspaceProps) {
-  const leading = messages.slice(0, 2);
-  const trailing = messages.slice(2);
-  const showsActiveRun =
-    (busy && !messages.at(-1)?.streaming) ||
-    (!busy && messages.at(-1)?.id === "message-agent-2");
+  const scrollArea = useRef<HTMLDivElement>(null);
+  const messages = task?.messages ?? [];
+  const plan = task?.plan ?? [];
+  const tools = task?.tools ?? [];
+  const lastMessage = messages.at(-1);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const element = scrollArea.current;
+      if (!element) return;
+      element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    task?.id,
+    messages.length,
+    lastMessage?.content.length,
+    plan.length,
+    tools.length,
+    busy,
+  ]);
 
   return (
     <main className="task-workspace">
       <header className="task-header">
         <div>
-          <h1>Refactor OAuth session storage</h1>
+          <h1>{task?.title ?? "Preparing task…"}</h1>
           <p>
             Grok Build <span>·</span> ACP <span>·</span>{" "}
-            <strong>feature/oauth-refresh</strong>
-            <GitBranch size={14} />
+            <strong
+              className={`task-status task-status--${task?.status ?? "idle"}`}
+            >
+              {task ? statusLabels[task.status] : "Loading"}
+            </strong>
           </p>
         </div>
         <div className="task-header__actions">
-          <button type="button" className="secondary-button" onClick={onRunTests}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onRunTests}
+            disabled={!task || busy}
+          >
             <Play size={16} />
             Run tests
           </button>
-          <button type="button" className="secondary-button" onClick={onReviewChanges}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onReviewChanges}
+          >
             <Code size={16} />
             Review changes
           </button>
         </div>
       </header>
 
-      <div className="conversation-scroll">
+      <div className="conversation-scroll" ref={scrollArea}>
         <div className="conversation">
-          {leading.map((entry, index) => (
-            <div key={entry.id}>
-              <Message entry={entry} />
-              {index === 0 ? <hr /> : null}
-            </div>
-          ))}
-          <PlanCard steps={plan} />
-          <ToolsCard tools={tools} />
-          {trailing.length ? <hr /> : null}
-          {trailing.map((entry) => (
-            <Message entry={entry} key={entry.id} />
-          ))}
-          {showsActiveRun ? (
+          {messages.length === 0 ? (
+            <section className="conversation-empty" aria-label="New task">
+              <span>
+                <ChatCircleDots size={24} />
+              </span>
+              <h2>Start a new task</h2>
+              <p>Describe what you want Grok Build to do in this workspace.</p>
+            </section>
+          ) : (
+            messages.map((entry) => <Message entry={entry} key={entry.id} />)
+          )}
+          {plan.length > 0 ? <PlanCard steps={plan} /> : null}
+          {tools.length > 0 ? <ToolsCard tools={tools} /> : null}
+          {busy ? (
             <div className="running-row">
-              <em>Running: auth/session.test.ts</em>
+              <em>Grok Build is working…</em>
               <SpinnerGap size={18} weight="bold" className="spin" />
             </div>
           ) : null}
@@ -181,7 +225,12 @@ export function TaskWorkspace({
       </div>
 
       <div className="composer-dock">
-        <Composer busy={busy} onSend={onSend} onCancel={onCancel} />
+        <Composer
+          busy={busy}
+          disabled={!task}
+          onSend={onSend}
+          onCancel={onCancel}
+        />
       </div>
     </main>
   );

@@ -3,16 +3,18 @@ import {
   Check,
   FileText,
   GearSix,
+  Plus,
   PuzzlePiece,
   ShareNetwork,
   SlidersHorizontal,
+  WarningCircle,
 } from "@phosphor-icons/react";
 import appIcon from "../assets/grokdesk-icon.png";
-import { taskGroups } from "../data/demo";
-import type { NavigationKey, RuntimeStatus } from "../types";
+import { formatTaskTime, groupTasks } from "../lib/tasks";
+import type { GrokTask, NavigationKey, RuntimeStatus } from "../types";
 
 const navItems = [
-  { id: "tasks" as const, label: "Tasks", icon: FileText, count: 3 },
+  { id: "tasks" as const, label: "Tasks", icon: FileText },
   { id: "plugins" as const, label: "Plugins", icon: PuzzlePiece },
   { id: "mcp" as const, label: "MCP", icon: ShareNetwork },
   { id: "settings" as const, label: "Settings", icon: GearSix },
@@ -26,6 +28,11 @@ interface SidebarProps {
   runtime: RuntimeStatus | null;
   statusText: string;
   onStatusClick: () => void;
+  tasks: GrokTask[];
+  activeTaskId: string | null;
+  taskSwitchDisabled: boolean;
+  onCreateTask: () => void;
+  onSelectTask: (taskId: string) => void;
 }
 
 export function Sidebar({
@@ -36,7 +43,14 @@ export function Sidebar({
   runtime,
   statusText,
   onStatusClick,
+  tasks,
+  activeTaskId,
+  taskSwitchDisabled,
+  onCreateTask,
+  onSelectTask,
 }: SidebarProps) {
+  const taskGroups = groupTasks(tasks);
+
   return (
     <aside className="sidebar" aria-label="Workspace navigation">
       <div className="sidebar__top">
@@ -55,7 +69,7 @@ export function Sidebar({
         </button>
 
         <nav className="primary-nav" aria-label="Primary">
-          {navItems.map(({ id, label, icon: Icon, count }) => (
+          {navItems.map(({ id, label, icon: Icon }) => (
             <button
               type="button"
               key={id}
@@ -66,28 +80,54 @@ export function Sidebar({
             >
               <Icon size={19} weight="regular" />
               <span>{label}</span>
-              {count ? <span className="nav-row__count">{count}</span> : null}
+              {id === "tasks" && tasks.length > 0 ? (
+                <span className="nav-row__count">{tasks.length}</span>
+              ) : null}
             </button>
           ))}
         </nav>
+
+        <button
+          type="button"
+          className="new-task-button"
+          onClick={onCreateTask}
+          disabled={taskSwitchDisabled}
+          aria-label="New task"
+        >
+          <Plus size={16} weight="bold" />
+          <span>New task</span>
+        </button>
       </div>
 
       <div className="task-history" aria-label="Recent tasks">
         {taskGroups.map((group) => (
           <section key={group.label} className="task-group">
             <h2>{group.label}</h2>
-            {group.items.map((item) => (
+            {group.tasks.map((task) => (
               <button
                 type="button"
-                key={item.title}
-                className={`task-row ${item.selected ? "is-selected" : ""}`}
-                onClick={() => onNavigate("tasks")}
+                key={task.id}
+                className={`task-row ${task.id === activeTaskId ? "is-selected" : ""}`}
+                onClick={() => onSelectTask(task.id)}
+                disabled={taskSwitchDisabled && task.id !== activeTaskId}
+                aria-current={task.id === activeTaskId ? "page" : undefined}
               >
-                <span className="task-row__title">{item.title}</span>
+                <span className="task-row__title">{task.title}</span>
                 <span className="task-row__meta">
-                  {item.time}
-                  {item.running ? <span className="status-dot status-dot--blue" /> : null}
-                  {item.complete ? <Check size={13} weight="bold" /> : null}
+                  {formatTaskTime(task.updatedAt)}
+                  {task.status === "running" ? (
+                    <span className="status-dot status-dot--blue" />
+                  ) : null}
+                  {task.status === "complete" ? (
+                    <Check size={13} weight="bold" />
+                  ) : null}
+                  {task.status === "error" ? (
+                    <WarningCircle
+                      size={13}
+                      weight="fill"
+                      className="task-row__error"
+                    />
+                  ) : null}
                 </span>
               </button>
             ))}
@@ -96,7 +136,12 @@ export function Sidebar({
       </div>
 
       <div className="sidebar__bottom">
-        <button type="button" className="profile-row" onClick={() => onNavigate("settings")}>
+        <button
+          type="button"
+          className="profile-row"
+          onClick={() => onNavigate("settings")}
+          aria-label="Open Grok account settings"
+        >
           <img src={appIcon} alt="" />
           <span>
             <strong>Grok account</strong>

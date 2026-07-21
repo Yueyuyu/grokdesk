@@ -1,17 +1,12 @@
 import {
   ArrowSquareOut,
   ArrowClockwise,
-  Check,
   CreditCard,
   DownloadSimple,
   FolderOpen,
-  GithubLogo,
-  Globe,
   Info,
   PlugsConnected,
   PuzzlePiece,
-  ShieldCheck,
-  Sparkle,
   UserCircle,
 } from "@phosphor-icons/react";
 import { formatCreditUsage, getAuthenticationLabel } from "../lib/runtime";
@@ -37,18 +32,6 @@ interface FeaturePanelProps {
   onVerifySubscription: () => Promise<unknown>;
   onManageSubscription: () => Promise<void>;
 }
-
-const pluginRows = [
-  { name: "GitHub", detail: "Issues, pull requests, checks, and review context", icon: GithubLogo, enabled: true },
-  { name: "Browser", detail: "Inspect and verify local product surfaces", icon: Globe, enabled: true },
-  { name: "Security review", detail: "Run focused checks before changes ship", icon: ShieldCheck, enabled: false },
-];
-
-const mcpRows = [
-  { name: "filesystem", detail: "stdio · workspace-scoped", status: "Connected" },
-  { name: "github", detail: "HTTP · OAuth", status: "Connected" },
-  { name: "linear", detail: "HTTP · OAuth", status: "Sign in" },
-];
 
 function formatPeriodEnd(value: string | null | undefined) {
   if (!value) return "尚未查询";
@@ -103,19 +86,12 @@ export function FeaturePanel({
         <header className="feature-panel__header">
           <span className="feature-panel__icon"><PuzzlePiece size={22} /></span>
           <div><h1>Plugins</h1><p>Extend Grok Build without leaving the task workspace.</p></div>
-          <button type="button" className="primary-button"><Sparkle size={16} /> Browse plugins</button>
         </header>
-        <div className="settings-list">
-          {pluginRows.map(({ name, detail, icon: Icon, enabled }) => (
-            <div className="settings-row" key={name}>
-              <span className="settings-row__icon"><Icon size={20} /></span>
-              <span><strong>{name}</strong><small>{detail}</small></span>
-              <button type="button" className={`toggle ${enabled ? "is-on" : ""}`} aria-label={`${enabled ? "Disable" : "Enable"} ${name}`}>
-                <span />
-              </button>
-            </div>
-          ))}
-        </div>
+        <section className="feature-empty-state">
+          <span><PuzzlePiece size={24} /></span>
+          <h2>Plugin discovery is not connected yet</h2>
+          <p>This page will list only plugins reported by the real Grok Runtime. No sample plugins are shown.</p>
+        </section>
       </main>
     );
   }
@@ -126,19 +102,12 @@ export function FeaturePanel({
         <header className="feature-panel__header">
           <span className="feature-panel__icon"><PlugsConnected size={22} /></span>
           <div><h1>MCP servers</h1><p>Tools and context exposed to the active Grok Build session.</p></div>
-          <button type="button" className="primary-button">Add server</button>
         </header>
-        <div className="settings-list">
-          {mcpRows.map((server) => (
-            <div className="settings-row" key={server.name}>
-              <span className="mcp-health"><span /></span>
-              <span><strong>{server.name}</strong><small>{server.detail}</small></span>
-              <button type="button" className={server.status === "Sign in" ? "secondary-button" : "plain-status"}>
-                {server.status === "Connected" ? <Check size={14} weight="bold" /> : null}{server.status}
-              </button>
-            </div>
-          ))}
-        </div>
+        <section className="feature-empty-state">
+          <span><PlugsConnected size={24} /></span>
+          <h2>MCP discovery is not connected yet</h2>
+          <p>This page will reflect servers exposed by the official ACP session. No sample connections are shown.</p>
+        </section>
       </main>
     );
   }
@@ -147,7 +116,7 @@ export function FeaturePanel({
     <main className="feature-panel feature-panel--settings">
       <header className="feature-panel__header">
         <div><h1>Settings</h1><p>Runtime、Grok 账号、订阅与界面偏好。</p></div>
-        <span className="version-chip">GrokDesk v0.1.6</span>
+        <span className="version-chip">GrokDesk v0.1.7</span>
       </header>
 
       {preview ? (

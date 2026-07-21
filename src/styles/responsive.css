@@ -48,6 +48,7 @@
   .workspace-switcher__label,
   .workspace-switcher > svg,
   .nav-row > span,
+  .new-task-button span,
   .task-history,
   .profile-row > span,
   .profile-row > svg,
@@ -79,6 +80,12 @@
 
   .nav-row svg {
     grid-area: 1 / 1;
+  }
+
+  .new-task-button {
+    width: 38px;
+    margin-inline: auto;
+    padding: 0;
   }
 
   .sidebar__bottom {

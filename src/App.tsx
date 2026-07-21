@@ -1,5 +1,11 @@
 import { CaretLeft, SidebarSimple } from "@phosphor-icons/react";
-import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { FeaturePanel } from "./components/FeaturePanel";
 import { Inspector } from "./components/Inspector";
 import { OnboardingPanel } from "./components/OnboardingPanel";
@@ -8,6 +14,7 @@ import { Sidebar } from "./components/Sidebar";
 import { TaskWorkspace } from "./components/TaskWorkspace";
 import { TitleBar } from "./components/TitleBar";
 import { useGrokRuntime } from "./hooks/useGrokRuntime";
+import { useTaskStore } from "./hooks/useTaskStore";
 import { chooseWorkspace, isDesktopRuntime } from "./lib/desktop";
 import { getRuntimeSetupStep } from "./lib/runtime";
 import type { InspectorTab, NavigationKey, ThemePreference } from "./types";
@@ -17,7 +24,9 @@ const clamp = (value: number, minimum: number, maximum: number) =>
 
 function getResolvedTheme(preference: ThemePreference) {
   if (preference !== "system") return preference;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
 }
 
 function Resizer({
@@ -45,12 +54,19 @@ function Resizer({
     window.addEventListener("pointerup", stop, { once: true });
   };
 
-  return <div className={`pane-resizer pane-resizer--${side}`} onPointerDown={begin} />;
+  return (
+    <div
+      className={`pane-resizer pane-resizer--${side}`}
+      onPointerDown={begin}
+    />
+  );
 }
 
 export function App() {
-  const [activeNavigation, setActiveNavigation] = useState<NavigationKey>("tasks");
-  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("changes");
+  const [activeNavigation, setActiveNavigation] =
+    useState<NavigationKey>("tasks");
+  const [inspectorTab, setInspectorTab] =
+    useState<InspectorTab>("changes");
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(268);
   const [inspectorWidth, setInspectorWidth] = useState(392);
@@ -58,15 +74,26 @@ export function App() {
     () => localStorage.getItem("grokdesk.workspace") || ".",
   );
   const [theme, setTheme] = useState<ThemePreference>(
-    () => (localStorage.getItem("grokdesk.theme") as ThemePreference | null) || "light",
+    () =>
+      (localStorage.getItem("grokdesk.theme") as ThemePreference | null) ||
+      "light",
   );
 
-  const grok = useGrokRuntime(workspacePath);
+  const taskStore = useTaskStore(workspacePath);
+  const grok = useGrokRuntime(
+    workspacePath,
+    taskStore.activeTask,
+    taskStore.updateTask,
+  );
   const setupStep = getRuntimeSetupStep(grok.runtime);
   const preview = !isDesktopRuntime();
 
   useEffect(() => {
-    const apply = () => document.documentElement.setAttribute("data-theme", getResolvedTheme(theme));
+    const apply = () =>
+      document.documentElement.setAttribute(
+        "data-theme",
+        getResolvedTheme(theme),
+      );
     apply();
     localStorage.setItem("grokdesk.theme", theme);
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -83,7 +110,7 @@ export function App() {
   }, []);
 
   const workspaceLabel = useMemo(() => {
-    if (!workspacePath || workspacePath === ".") return "acme/web-app";
+    if (!workspacePath || workspacePath === ".") return "Current workspace";
     const parts = workspacePath.split(/[\\/]/).filter(Boolean);
     return parts.slice(-2).join("/") || workspacePath;
   }, [workspacePath]);
@@ -91,9 +118,9 @@ export function App() {
   const pickWorkspace = async () => {
     const selected = await chooseWorkspace();
     if (!selected) return;
+    if (grok.sessionId) await grok.disconnect();
     setWorkspacePath(selected);
     localStorage.setItem("grokdesk.workspace", selected);
-    if (grok.sessionId) await grok.disconnect();
   };
 
   const gridStyle = {
@@ -104,7 +131,10 @@ export function App() {
   return (
     <div className="app-shell">
       <TitleBar />
-      <div className={`app-grid ${inspectorCollapsed ? "inspector-is-collapsed" : ""}`} style={gridStyle}>
+      <div
+        className={`app-grid ${inspectorCollapsed ? "inspector-is-collapsed" : ""}`}
+        style={gridStyle}
+      >
         <Sidebar
           active={activeNavigation}
           onNavigate={setActiveNavigation}
@@ -113,22 +143,37 @@ export function App() {
           runtime={grok.runtime}
           statusText={grok.statusText}
           onStatusClick={() => setActiveNavigation("settings")}
+          tasks={taskStore.tasks}
+          activeTaskId={taskStore.activeTaskId}
+          taskSwitchDisabled={grok.busy}
+          onCreateTask={() => {
+            taskStore.createTask();
+            setActiveNavigation("tasks");
+          }}
+          onSelectTask={(taskId) => {
+            taskStore.selectTask(taskId);
+            setActiveNavigation("tasks");
+          }}
         />
         <Resizer
           side="left"
-          onResize={(delta) => setSidebarWidth((width) => clamp(width + delta, 220, 340))}
+          onResize={(delta) =>
+            setSidebarWidth((width) => clamp(width + delta, 220, 340))
+          }
         />
 
         {activeNavigation === "tasks" ? (
           setupStep === "ready" ? (
             <TaskWorkspace
-              messages={grok.messages}
-              plan={grok.plan}
-              tools={grok.tools}
+              task={taskStore.activeTask}
               busy={grok.busy}
               onSend={grok.send}
               onCancel={grok.cancel}
-              onRunTests={() => void grok.send("Run the relevant tests for the OAuth session changes and report any failures.")}
+              onRunTests={() =>
+                void grok.send(
+                  "Run the relevant tests for the current changes and report any failures.",
+                )
+              }
               onReviewChanges={() => {
                 setInspectorCollapsed(false);
                 setInspectorTab("changes");
@@ -173,7 +218,9 @@ export function App() {
           <>
             <Resizer
               side="right"
-              onResize={(delta) => setInspectorWidth((width) => clamp(width + delta, 330, 520))}
+              onResize={(delta) =>
+                setInspectorWidth((width) => clamp(width + delta, 330, 520))
+              }
             />
             <Inspector
               activeTab={inspectorTab}
@@ -182,6 +229,8 @@ export function App() {
               onClearTerminal={grok.clearTerminal}
               onCollapse={() => setInspectorCollapsed(true)}
               sessionId={grok.sessionId}
+              task={taskStore.activeTask}
+              workspacePath={workspacePath}
             />
           </>
         ) : (
@@ -197,15 +246,28 @@ export function App() {
         )}
       </div>
 
-      {grok.error ? <div className="error-toast" role="alert">{grok.error}</div> : null}
+      {grok.error ? (
+        <div className="error-toast" role="alert">
+          {grok.error}
+        </div>
+      ) : null}
       {grok.notice ? (
         <div className="status-toast" role="status" aria-live="polite">
           <span>{grok.notice}</span>
-          <button type="button" onClick={grok.dismissNotice} aria-label="关闭提示">×</button>
+          <button
+            type="button"
+            onClick={grok.dismissNotice}
+            aria-label="Close notification"
+          >
+            ×
+          </button>
         </div>
       ) : null}
       {grok.permission ? (
-        <PermissionDialog request={grok.permission} onAnswer={grok.answerPermission} />
+        <PermissionDialog
+          request={grok.permission}
+          onAnswer={grok.answerPermission}
+        />
       ) : null}
     </div>
   );

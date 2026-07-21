@@ -50,6 +50,21 @@ export interface ToolActivity {
   status: "complete" | "active" | "pending" | "failed";
 }
 
+export type TaskStatus = "idle" | "running" | "complete" | "error";
+
+export interface GrokTask {
+  id: string;
+  workspacePath: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  status: TaskStatus;
+  acpSessionId: string | null;
+  messages: ChatEntry[];
+  plan: PlanStep[];
+  tools: ToolActivity[];
+}
+
 export interface ChangedFile {
   path: string;
   status: "M" | "A" | "D";

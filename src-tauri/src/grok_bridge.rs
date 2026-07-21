@@ -497,14 +497,42 @@ async fn stderr_reader(stderr: tokio::process::ChildStderr, app: AppHandle) {
     }
 }
 
+fn session_start_request(
+    workspace: &Path,
+    resume_session_id: Option<&str>,
+) -> (&'static str, Value) {
+    if let Some(session_id) = resume_session_id {
+        (
+            "session/load",
+            json!({
+                "sessionId": session_id,
+                "cwd": workspace.to_string_lossy(),
+                "mcpServers": []
+            }),
+        )
+    } else {
+        (
+            "session/new",
+            json!({
+                "cwd": workspace.to_string_lossy(),
+                "mcpServers": []
+            }),
+        )
+    }
+}
+
 #[tauri::command]
 pub async fn start_acp_session(
     cwd: String,
+    resume_session_id: Option<String>,
     app: AppHandle,
     bridge: State<'_, GrokBridge>,
 ) -> Result<String, String> {
+    let resume_session_id = resume_session_id.filter(|session_id| !session_id.trim().is_empty());
     if let Some(session_id) = bridge.session_id.lock().await.clone() {
-        return Ok(session_id);
+        if resume_session_id.as_deref() == Some(session_id.as_str()) {
+            return Ok(session_id);
+        }
     }
 
     let executable = grok_executable()?;
@@ -575,15 +603,11 @@ pub async fn start_acp_session(
         return Err(error);
     }
 
+    let (session_method, session_params) =
+        session_start_request(&workspace, resume_session_id.as_deref());
+
     let session = bridge
-        .request(
-            "session/new",
-            json!({
-                "cwd": workspace.to_string_lossy(),
-                "mcpServers": []
-            }),
-            Duration::from_secs(60),
-        )
+        .request(session_method, session_params, Duration::from_secs(60))
         .await;
 
     let session = match session {
@@ -593,11 +617,15 @@ pub async fn start_acp_session(
             return Err(error);
         }
     };
-    let session_id = session
-        .get("sessionId")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "Grok Build ACP did not return a sessionId.".to_string())?
-        .to_string();
+    let session_id = if let Some(session_id) = resume_session_id {
+        session_id
+    } else {
+        session
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "Grok Build ACP did not return a sessionId.".to_string())?
+            .to_string()
+    };
 
     *bridge.session_id.lock().await = Some(session_id.clone());
     let _ = app.emit("grok://status", "Grok Build · ACP connected");
@@ -970,6 +998,24 @@ mod tests {
             Some("http://127.0.0.1:7890".to_string())
         );
         assert_eq!(proxy_url_from_windows_setting("socks=127.0.0.1:7891"), None);
+    }
+
+    #[test]
+    fn creates_a_new_acp_session_request_without_a_saved_id() {
+        let (method, params) = session_start_request(Path::new("C:/work/app"), None);
+
+        assert_eq!(method, "session/new");
+        assert_eq!(params["cwd"], "C:/work/app");
+        assert!(params.get("sessionId").is_none());
+    }
+
+    #[test]
+    fn loads_the_saved_acp_session_id() {
+        let (method, params) = session_start_request(Path::new("C:/work/app"), Some("session-123"));
+
+        assert_eq!(method, "session/load");
+        assert_eq!(params["cwd"], "C:/work/app");
+        assert_eq!(params["sessionId"], "session-123");
     }
 
     #[test]
