@@ -1,8 +1,12 @@
-import { Minus, Square, X } from "@phosphor-icons/react";
+import { MagnifyingGlass, Minus, Square, X } from "@phosphor-icons/react";
 import appIcon from "../assets/grokdesk-icon.png";
 import { windowActions } from "../lib/desktop";
 
-export function TitleBar() {
+export function TitleBar({
+  onOpenCommandPalette,
+}: {
+  onOpenCommandPalette: () => void;
+}) {
   return (
     <header className="titlebar" data-tauri-drag-region>
       <div className="titlebar__brand" data-tauri-drag-region>
@@ -10,6 +14,17 @@ export function TitleBar() {
         <span>GrokDesk</span>
       </div>
       <div className="titlebar__drag" data-tauri-drag-region />
+      <button
+        type="button"
+        className="titlebar__command-trigger"
+        onClick={onOpenCommandPalette}
+        aria-label="Search tasks or run a command"
+        title="Search tasks or run a command (Ctrl+K)"
+      >
+        <MagnifyingGlass size={14} />
+        <span>Search or run a command</span>
+        <kbd>Ctrl K</kbd>
+      </button>
       <div className="window-controls" aria-label="Window controls">
         <button
           type="button"

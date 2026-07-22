@@ -65,6 +65,7 @@ The agent itself remains the official Grok Build CLI. GrokDesk focuses on the de
 | Plugins and MCP | Reads and manages real Plugin, Marketplace, and MCP state exposed by the official Runtime |
 | Local task history | Stores tasks, messages, plans, tools, and ACP session IDs per workspace; attachment contents are never stored |
 | Task lifecycle | Archives and restores tasks, creates local branches with a fresh ACP session, and explicitly imports/exports strictly validated JSON up to 8 MiB without credentials or attachment bodies |
+| Command palette and cross-task search | Press `Ctrl+K` to search active and archived tasks in the current workspace across titles, conversations, attachment names, plans, and tools, or run navigation, task, workspace, and inspector commands |
 | Desktop shell | Single instance, resizable panes, collapsible inspector, Light/Dark/System themes, and a Windows desktop shortcut |
 
 ### Attachment boundaries
@@ -148,6 +149,7 @@ Bundles are written to `src-tauri/target/release/bundle/`.
 - The workspace terminal runs only commands explicitly entered by the user; output stays in the current app session and is not written to task history.
 - Attachment content is encoded only for the current turn and is not stored in task history.
 - Task JSON is imported or exported only after an explicit user action. It may contain conversations, file names, and workspace paths, but never OAuth/MCP credentials, ACP session IDs, or attachment bodies.
+- The command palette searches only local tasks in the current workspace; queries and results are never uploaded to an external service.
 - File revert always requires confirmation; there is no automatic bulk rollback.
 - Raw HTML is disabled in Markdown, and external links use isolated new-window behavior.
 
@@ -157,7 +159,7 @@ Bundles are written to `src-tauri/target/release/bundle/`.
 - One-click Runtime installation is currently Windows-only.
 - Attachment support ultimately depends on the installed official Runtime's ACP capabilities.
 - Subscription and quota display depends on the official CLI's billing method.
-- Permission history, multi-terminal tabs, a command palette, cross-task search, structured test results, and cross-device sync remain planned work.
+- Permission history, multi-terminal tabs, structured test results, and cross-device sync remain planned work.
 
 ## Contributing
 

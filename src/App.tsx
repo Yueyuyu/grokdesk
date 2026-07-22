@@ -6,6 +6,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { CommandPalette } from "./components/CommandPalette";
 import { FeaturePanel } from "./components/FeaturePanel";
 import { Inspector } from "./components/Inspector";
 import { McpPanel } from "./components/McpPanel";
@@ -78,6 +79,7 @@ export function App() {
   const [inspectorTab, setInspectorTab] =
     useState<InspectorTab>("changes");
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(268);
   const [inspectorWidth, setInspectorWidth] = useState(392);
   const [workspacePath, setWorkspacePath] = useState(
@@ -98,6 +100,10 @@ export function App() {
   );
   const terminal = useWorkspaceTerminal(workspacePath);
   const workspace = useWorkspaceChanges(workspacePath, grok.busy || terminal.running);
+  const searchableTasks = useMemo(
+    () => [...taskStore.tasks, ...taskStore.archivedTasks],
+    [taskStore.archivedTasks, taskStore.tasks],
+  );
   const setupStep = getRuntimeSetupStep(grok.runtime);
   const preview = !isDesktopRuntime();
 
@@ -122,6 +128,22 @@ export function App() {
     return () => compactViewport.removeEventListener("change", syncInspector);
   }, []);
 
+  useEffect(() => {
+    const openCommandPalette = (event: KeyboardEvent) => {
+      if (grok.permission) return;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") {
+        event.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+    };
+    window.addEventListener("keydown", openCommandPalette);
+    return () => window.removeEventListener("keydown", openCommandPalette);
+  }, [grok.permission]);
+
+  useEffect(() => {
+    if (grok.permission) setCommandPaletteOpen(false);
+  }, [grok.permission]);
+
   const workspaceLabel = useMemo(() => {
     if (!isWorkspaceSelected(workspacePath)) return "Choose workspace";
     const parts = workspacePath.split(/[\\/]/).filter(Boolean);
@@ -144,7 +166,11 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <TitleBar />
+      <TitleBar
+        onOpenCommandPalette={() => {
+          if (!grok.permission) setCommandPaletteOpen(true);
+        }}
+      />
       <div
         className={`app-grid ${inspectorCollapsed ? "inspector-is-collapsed" : ""}`}
         style={gridStyle}
@@ -344,6 +370,35 @@ export function App() {
           onAnswer={grok.answerPermission}
         />
       ) : null}
+      <CommandPalette
+        open={commandPaletteOpen}
+        tasks={searchableTasks}
+        activeTaskId={taskStore.activeTaskId}
+        activeNavigation={activeNavigation}
+        taskSwitchDisabled={grok.busy || terminal.running || !workspaceReady}
+        workspaceReady={workspaceReady}
+        inspectorCollapsed={inspectorCollapsed}
+        onClose={() => setCommandPaletteOpen(false)}
+        onOpenTask={(task) => {
+          if (task.archivedAt) {
+            taskStore.restoreTask(task.id);
+          } else {
+            taskStore.selectTask(task.id);
+          }
+          setActiveNavigation("tasks");
+        }}
+        onCreateTask={() => {
+          taskStore.createTask();
+          setActiveNavigation("tasks");
+        }}
+        onChooseWorkspace={pickWorkspace}
+        onNavigate={setActiveNavigation}
+        onOpenInspector={(tab) => {
+          setInspectorTab(tab);
+          setInspectorCollapsed(false);
+        }}
+        onToggleInspector={() => setInspectorCollapsed((current) => !current)}
+      />
     </div>
   );
 }

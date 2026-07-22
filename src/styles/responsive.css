@@ -66,6 +66,18 @@
     display: none;
   }
 
+  .titlebar__command-trigger {
+    width: 32px;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 0;
+  }
+
+  .titlebar__command-trigger span,
+  .titlebar__command-trigger kbd {
+    display: none;
+  }
+
   .sidebar__top {
     padding-inline: 10px;
   }
@@ -171,6 +183,42 @@
   .titlebar__logo {
     width: 21px;
     height: 21px;
+  }
+
+  .titlebar__command-trigger {
+    width: 30px;
+    height: 25px;
+    margin-right: 5px;
+  }
+
+  .command-palette-backdrop {
+    padding: 48px 8px 8px;
+  }
+
+  .command-palette {
+    width: 100%;
+    max-height: calc(100vh - 56px);
+  }
+
+  .command-palette__option {
+    grid-template-columns: 29px minmax(0, 1fr);
+  }
+
+  .command-palette__meta {
+    display: none;
+  }
+
+  .command-palette__copy small span:first-child,
+  .command-palette__copy small span:nth-child(2) {
+    display: none;
+  }
+
+  .command-palette__footer {
+    gap: 8px;
+  }
+
+  .command-palette__footer strong {
+    display: none;
   }
 
   .sidebar__top {

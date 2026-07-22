@@ -9,6 +9,8 @@
 ## Allowed first-viewport copy
 
 - GrokDesk
+- Search or run a command
+- Search tasks or run a command
 - Workspaces
 - acme/web-app
 - Tasks
@@ -61,6 +63,7 @@
 - Workspace selector and native folder picker.
 - Tasks, Plugins, MCP, and Settings navigation.
 - Task rename/delete, archive/restore, local branching with a fresh ACP session, and validated JSON import/export.
+- `Ctrl+K` command palette for local cross-task search, navigation, task creation, workspace selection, and inspector commands.
 - Resizable left and right panes plus inspector collapse.
 - Changes, Terminal, and Context tabs.
 - Changed-file selection and copy-diff action.

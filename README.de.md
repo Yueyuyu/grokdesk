@@ -65,6 +65,7 @@ Der Agent bleibt die offizielle Grok Build CLI. GrokDesk verbessert die Desktop-
 | Plugins und MCP | Liest und verwaltet reale Plugin-, Marketplace- und MCP-Daten der offiziellen Runtime |
 | Lokaler Aufgabenverlauf | Speichert Aufgaben, Nachrichten, Pläne, Tools und ACP Session IDs pro Workspace; Anhangsinhalte werden nicht gespeichert |
 | Aufgabenlebenszyklus | Archiviert und stellt Aufgaben wieder her, erstellt lokale Zweige mit neuer ACP Session und importiert/exportiert ausdrücklich streng validiertes JSON bis 8 MiB – ohne Zugangsdaten oder Anhangsinhalte |
+| Befehlspalette und aufgabenübergreifende Suche | `Ctrl+K` durchsucht aktive und archivierte Aufgaben im aktuellen Workspace nach Titeln, Unterhaltungen, Anhangsnamen, Plänen und Tools oder führt Navigations-, Aufgaben-, Workspace- und Inspector-Befehle aus |
 | Desktop-Shell | Einzelinstanz, verstellbare Bereiche, einklappbarer Inspector, Light/Dark/System und Windows-Desktopverknüpfung |
 
 ### Grenzen für Anhänge
@@ -148,6 +149,7 @@ Pakete werden unter `src-tauri/target/release/bundle/` erzeugt.
 - Das Workspace-Terminal führt nur ausdrücklich eingegebene Befehle aus; die Ausgabe bleibt in der aktuellen App-Sitzung und wird nicht im Aufgabenverlauf gespeichert.
 - Anhangsinhalte werden nur für die aktuelle Anfrage kodiert und nicht im Aufgabenverlauf gespeichert.
 - Aufgaben-JSON wird nur nach einer ausdrücklichen Benutzeraktion importiert oder exportiert. Es kann Unterhaltungen, Dateinamen und Workspace-Pfade enthalten, aber niemals OAuth-/MCP-Zugangsdaten, ACP Session IDs oder Anhangsinhalte.
+- Die Befehlspalette durchsucht nur lokale Aufgaben im aktuellen Workspace; Suchbegriffe und Ergebnisse werden nicht an externe Dienste übertragen.
 - Das Zurücksetzen einer Datei erfordert immer eine Bestätigung; es gibt kein automatisches Massen-Rollback.
 - Rohes HTML ist in Markdown deaktiviert; externe Links verwenden ein isoliertes neues Fenster.
 
@@ -157,7 +159,7 @@ Pakete werden unter `src-tauri/target/release/bundle/` erzeugt.
 - Die Ein-Klick-Installation der Runtime ist derzeit nur unter Windows verfügbar.
 - Anhänge hängen letztlich von den ACP-Fähigkeiten der installierten offiziellen Runtime ab.
 - Abonnement und Kontingent hängen von der Billing-Methode der offiziellen CLI ab.
-- Berechtigungsverlauf, mehrere Terminal-Tabs, Befehlspalette, aufgabenübergreifende Suche, strukturierte Testergebnisse und geräteübergreifende Synchronisierung sind geplant.
+- Berechtigungsverlauf, mehrere Terminal-Tabs, strukturierte Testergebnisse und geräteübergreifende Synchronisierung sind geplant.
 
 ## Mitwirken
 
