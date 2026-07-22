@@ -1,6 +1,7 @@
 import {
   Archive,
   FileText,
+  Flask,
   FolderOpen,
   GearSix,
   ListMagnifyingGlass,
@@ -170,6 +171,16 @@ export function CommandPalette({
         featured: true,
         disabled: !workspaceReady,
         run: () => onOpenInspector("terminal"),
+      },
+      {
+        id: "inspector-tests",
+        label: "Open Tests inspector",
+        detail: "Review structured results from real terminal output",
+        keywords: "vitest cargo jest node results failures",
+        icon: <Flask size={17} />,
+        featured: true,
+        disabled: !workspaceReady,
+        run: () => onOpenInspector("tests"),
       },
       {
         id: "inspector-context",

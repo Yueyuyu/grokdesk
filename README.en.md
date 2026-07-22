@@ -61,6 +61,7 @@ The agent itself remains the official Grok Build CLI. GrokDesk focuses on the de
 | Files and images | Multi-select, drag and drop, previews, removal, and attachment-only prompts; content is sent as real ACP image or resource blocks |
 | Workspace review | Explicit project-folder selection, real Git status and unified diffs, per-file stage/unstage, and confirmed revert |
 | Real workspace terminal | Runs PowerShell in the selected project with live stdout/stderr, command history, process-tree cancellation, and a separate ACP log view |
+| Background terminals and test results | Runs up to eight independent terminal tabs concurrently; tabs can be created, renamed, closed, and stopped individually, while real Vitest, Cargo, Jest, and Node output is parsed into pass, failure, and duration summaries |
 | Runtime and sign-in | One-click installation of the official Grok Runtime and authentication through `grok login --oauth` |
 | Plugins and MCP | Reads and manages real Plugin, Marketplace, and MCP state exposed by the official Runtime |
 | Local task history | Stores tasks, messages, plans, tools, and ACP session IDs per workspace; attachment contents are never stored |
@@ -147,7 +148,7 @@ Bundles are written to `src-tauri/target/release/bundle/`.
 - GrokDesk does not read, display, or persist OAuth tokens.
 - Runtime installation runs `https://x.ai/cli/install.ps1` only after an explicit click.
 - ACP and Git operations are scoped to the folder the user explicitly selected.
-- The workspace terminal runs only commands explicitly entered by the user; output stays in the current app session and is not written to task history.
+- The workspace terminal runs only commands explicitly entered by the user; raw output and structured test summaries stay in the current app session and are not written to task history.
 - Attachment content is encoded only for the current turn and is not stored in task history.
 - Task JSON is imported or exported only after an explicit user action. It may contain conversations, file names, and workspace paths, but never OAuth/MCP credentials, ACP session IDs, or attachment bodies.
 - The command palette searches only local tasks in the current workspace; queries and results are never uploaded to an external service.
@@ -161,7 +162,8 @@ Bundles are written to `src-tauri/target/release/bundle/`.
 - One-click Runtime installation is currently Windows-only.
 - Attachment support ultimately depends on the installed official Runtime's ACP capabilities.
 - Subscription and quota display depends on the official CLI's billing method.
-- Multi-terminal tabs, structured test results, and cross-device sync remain planned work.
+- The terminal currently runs non-interactive PowerShell commands rather than a full PTY/TTY session.
+- Cross-device sync remains planned work.
 
 ## Contributing
 

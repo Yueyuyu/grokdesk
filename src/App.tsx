@@ -197,7 +197,7 @@ export function App() {
           activeTaskId={taskStore.activeTaskId}
           pendingPermissionCount={auditStore.pendingCount}
           taskSwitchDisabled={
-            grok.busy || terminal.running || Boolean(grok.permission) || !workspaceReady
+            grok.busy || Boolean(grok.permission) || !workspaceReady
           }
           onCreateTask={() => {
             taskStore.createTask();
@@ -396,7 +396,7 @@ export function App() {
         tasks={searchableTasks}
         activeTaskId={taskStore.activeTaskId}
         activeNavigation={activeNavigation}
-        taskSwitchDisabled={grok.busy || terminal.running || !workspaceReady}
+        taskSwitchDisabled={grok.busy || !workspaceReady}
         workspaceReady={workspaceReady}
         inspectorCollapsed={inspectorCollapsed}
         onClose={() => setCommandPaletteOpen(false)}

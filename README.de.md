@@ -61,6 +61,7 @@ Der Agent bleibt die offizielle Grok Build CLI. GrokDesk verbessert die Desktop-
 | Dateien und Bilder | Mehrfachauswahl, Drag-and-drop, Vorschau, Entfernen und Nachrichten nur mit Anhang; echte Übertragung als ACP-image/resource |
 | Workspace-Review | Explizite Ordnerwahl, echter Git-Status und Unified Diff, stage/unstage pro Datei sowie bestätigtes Zurücksetzen |
 | Echtes Workspace-Terminal | Führt PowerShell im gewählten Projekt aus, zeigt stdout/stderr live und unterstützt Befehlsverlauf, Prozessbaum-Abbruch sowie eine getrennte ACP-Logansicht |
+| Hintergrund-Terminals und Testergebnisse | Führt bis zu acht unabhängige Terminal-Tabs parallel aus; Tabs können erstellt, umbenannt, geschlossen und einzeln gestoppt werden, während reale Vitest-, Cargo-, Jest- und Node-Ausgaben in Erfolgs-, Fehler- und Zeitangaben umgewandelt werden |
 | Runtime und Anmeldung | Ein-Klick-Installation der offiziellen Grok Runtime und Anmeldung über `grok login --oauth` |
 | Plugins und MCP | Liest und verwaltet reale Plugin-, Marketplace- und MCP-Daten der offiziellen Runtime |
 | Lokaler Aufgabenverlauf | Speichert Aufgaben, Nachrichten, Pläne, Tools und ACP Session IDs pro Workspace; Anhangsinhalte werden nicht gespeichert |
@@ -147,7 +148,7 @@ Pakete werden unter `src-tauri/target/release/bundle/` erzeugt.
 - GrokDesk liest, zeigt oder speichert keine OAuth-Token.
 - Die Runtime-Installation führt `https://x.ai/cli/install.ps1` nur nach einem ausdrücklichen Klick aus.
 - ACP- und Git-Aktionen sind auf den vom Nutzer ausgewählten Ordner begrenzt.
-- Das Workspace-Terminal führt nur ausdrücklich eingegebene Befehle aus; die Ausgabe bleibt in der aktuellen App-Sitzung und wird nicht im Aufgabenverlauf gespeichert.
+- Das Workspace-Terminal führt nur ausdrücklich eingegebene Befehle aus; Rohausgabe und strukturierte Testzusammenfassungen bleiben in der aktuellen App-Sitzung und werden nicht im Aufgabenverlauf gespeichert.
 - Anhangsinhalte werden nur für die aktuelle Anfrage kodiert und nicht im Aufgabenverlauf gespeichert.
 - Aufgaben-JSON wird nur nach einer ausdrücklichen Benutzeraktion importiert oder exportiert. Es kann Unterhaltungen, Dateinamen und Workspace-Pfade enthalten, aber niemals OAuth-/MCP-Zugangsdaten, ACP Session IDs oder Anhangsinhalte.
 - Die Befehlspalette durchsucht nur lokale Aufgaben im aktuellen Workspace; Suchbegriffe und Ergebnisse werden nicht an externe Dienste übertragen.
@@ -161,7 +162,8 @@ Pakete werden unter `src-tauri/target/release/bundle/` erzeugt.
 - Die Ein-Klick-Installation der Runtime ist derzeit nur unter Windows verfügbar.
 - Anhänge hängen letztlich von den ACP-Fähigkeiten der installierten offiziellen Runtime ab.
 - Abonnement und Kontingent hängen von der Billing-Methode der offiziellen CLI ab.
-- Mehrere Terminal-Tabs, strukturierte Testergebnisse und geräteübergreifende Synchronisierung sind geplant.
+- Das Terminal führt derzeit nicht interaktive PowerShell-Befehle statt einer vollständigen PTY/TTY-Sitzung aus.
+- Geräteübergreifende Synchronisierung bleibt geplant.
 
 ## Mitwirken
 

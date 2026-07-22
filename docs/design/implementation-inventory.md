@@ -29,6 +29,7 @@
 - Review changes
 - Changes
 - Terminal
+- Tests
 - Context
 - Send
 
@@ -72,7 +73,9 @@
 - `Ctrl+K` command palette for local cross-task search, navigation, task creation, workspace selection, and inspector commands.
 - Local permission and execution audit for redacted permission decisions, Grok tool lifecycles, and workspace-command outcomes, with filtering, search, retention disclosure, and confirmed clearing.
 - Resizable left and right panes plus inspector collapse.
-- Changes, Terminal, and Context tabs.
+- Changes, Terminal, Tests, and Context tabs.
+- Up to eight independent workspace-terminal tabs with per-tab draft, history, output, background state, rename/close controls, and process-tree cancellation.
+- Session-only structured Vitest, Cargo, Jest, and Node result summaries derived from real terminal output; unrecognized commands remain explicitly unstructured.
 - Changed-file selection and copy-diff action.
 - Composer input, send, cancel, attach, mention, and branch selection controls.
 - Real Grok binary detection, official OAuth launch, ACP session start, streamed session updates, permission response, and cancellation.

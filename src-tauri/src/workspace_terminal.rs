@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::{path::PathBuf, process::Stdio, time::Instant};
+use std::{collections::HashMap, path::PathBuf, process::Stdio, time::Instant};
 use tauri::{AppHandle, Emitter, State};
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
@@ -14,15 +14,11 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MAX_COMMAND_CHARS: usize = 4_096;
 const MAX_OUTPUT_LINE_CHARS: usize = 16_384;
+const MAX_CONCURRENT_COMMANDS: usize = 8;
 
 #[derive(Default)]
 pub struct WorkspaceTerminal {
-    running: Mutex<Option<RunningWorkspaceCommand>>,
-}
-
-struct RunningWorkspaceCommand {
-    command_id: String,
-    cancel: watch::Sender<bool>,
+    running: Mutex<HashMap<String, watch::Sender<bool>>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -85,6 +81,23 @@ fn validated_command_id(command_id: &str) -> Result<String, String> {
         return Err("The workspace command identifier is invalid.".to_string());
     }
     Ok(value.to_string())
+}
+
+fn reserve_running_command(
+    running: &mut HashMap<String, watch::Sender<bool>>,
+    command_id: &str,
+    cancel: watch::Sender<bool>,
+) -> Result<(), String> {
+    if running.contains_key(command_id) {
+        return Err("The workspace command identifier is already running.".to_string());
+    }
+    if running.len() >= MAX_CONCURRENT_COMMANDS {
+        return Err(format!(
+            "Up to {MAX_CONCURRENT_COMMANDS} workspace commands can run at once."
+        ));
+    }
+    running.insert(command_id.to_string(), cancel);
+    Ok(())
 }
 
 fn truncate_output_line(line: &str) -> String {
@@ -272,16 +285,7 @@ pub async fn run_workspace_command(
 
     {
         let mut running = terminal.running.lock().await;
-        if let Some(current) = running.as_ref() {
-            return Err(format!(
-                "Another workspace command is already running ({})",
-                current.command_id
-            ));
-        }
-        *running = Some(RunningWorkspaceCommand {
-            command_id: command_id.clone(),
-            cancel: cancel_sender,
-        });
+        reserve_running_command(&mut running, &command_id, cancel_sender)?;
     }
 
     let result = execute_command(
@@ -294,12 +298,7 @@ pub async fn run_workspace_command(
     .await;
 
     let mut running = terminal.running.lock().await;
-    if running
-        .as_ref()
-        .is_some_and(|current| current.command_id == command_id)
-    {
-        *running = None;
-    }
+    running.remove(&command_id);
     result
 }
 
@@ -309,17 +308,22 @@ pub async fn cancel_workspace_command(
     command_id: String,
 ) -> Result<(), String> {
     let command_id = validated_command_id(&command_id)?;
-    let running = terminal.running.lock().await;
-    let Some(current) = running.as_ref() else {
-        return Err("No workspace command is running.".to_string());
+    let cancel = {
+        let running = terminal.running.lock().await;
+        running.get(&command_id).cloned()
     };
-    if current.command_id != command_id {
+    let Some(cancel) = cancel else {
         return Err("The requested workspace command is no longer running.".to_string());
-    }
-    current
-        .cancel
+    };
+    cancel
         .send(true)
         .map_err(|_| "The workspace command already finished.".to_string())
+}
+
+#[cfg(test)]
+fn test_cancel_sender() -> watch::Sender<bool> {
+    let (sender, _receiver) = watch::channel(false);
+    sender
 }
 
 #[cfg(test)]
@@ -332,6 +336,32 @@ mod tests {
         assert!(validated_command("   ").is_err());
         assert!(validated_command_id("terminal-123").is_ok());
         assert!(validated_command_id("terminal/123").is_err());
+    }
+
+    #[test]
+    fn reserves_independent_commands_and_rejects_duplicates() {
+        let mut running = HashMap::new();
+        reserve_running_command(&mut running, "command-1", test_cancel_sender()).unwrap();
+        reserve_running_command(&mut running, "command-2", test_cancel_sender()).unwrap();
+        assert_eq!(running.len(), 2);
+        assert!(reserve_running_command(&mut running, "command-1", test_cancel_sender()).is_err());
+    }
+
+    #[test]
+    fn enforces_the_terminal_tab_concurrency_limit() {
+        let mut running = HashMap::new();
+        for index in 0..MAX_CONCURRENT_COMMANDS {
+            reserve_running_command(
+                &mut running,
+                &format!("command-{index}"),
+                test_cancel_sender(),
+            )
+            .unwrap();
+        }
+        assert!(
+            reserve_running_command(&mut running, "command-overflow", test_cancel_sender())
+                .is_err()
+        );
     }
 
     #[test]

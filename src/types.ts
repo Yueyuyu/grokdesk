@@ -7,7 +7,7 @@ export type NavigationKey =
   | "mcp"
   | "settings";
 
-export type InspectorTab = "changes" | "terminal" | "context";
+export type InspectorTab = "changes" | "terminal" | "tests" | "context";
 
 export type AuthenticationState =
   | "verified"

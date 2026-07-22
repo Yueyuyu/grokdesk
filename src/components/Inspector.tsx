@@ -4,6 +4,7 @@ import type { WorkspaceTerminalController } from "../hooks/useWorkspaceTerminal"
 import type { GrokTask, InspectorTab } from "../types";
 import { WorkspaceChangesPanel } from "./WorkspaceChangesPanel";
 import { WorkspaceTerminalPanel } from "./WorkspaceTerminalPanel";
+import { WorkspaceTestsPanel } from "./WorkspaceTestsPanel";
 
 interface InspectorProps {
   activeTab: InspectorTab;
@@ -24,6 +25,7 @@ interface InspectorProps {
 const tabLabels: Record<InspectorTab, string> = {
   changes: "Changes",
   terminal: "Terminal",
+  tests: "Tests",
   context: "Context",
 };
 
@@ -88,6 +90,15 @@ export function Inspector({
           workspacePath={workspacePath}
           workspaceReady={workspaceReady}
           preview={preview}
+        />
+      ) : null}
+
+      {activeTab === "tests" ? (
+        <WorkspaceTestsPanel
+          terminal={terminal}
+          preview={preview}
+          workspaceReady={workspaceReady}
+          onOpenTerminal={() => onTabChange("terminal")}
         />
       ) : null}
 
