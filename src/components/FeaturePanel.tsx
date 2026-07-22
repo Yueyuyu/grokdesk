@@ -5,8 +5,6 @@ import {
   DownloadSimple,
   FolderOpen,
   Info,
-  PlugsConnected,
-  PuzzlePiece,
   UserCircle,
 } from "@phosphor-icons/react";
 import { formatCreditUsage, getAuthenticationLabel } from "../lib/runtime";
@@ -14,11 +12,11 @@ import { isWorkspaceSelected } from "../lib/workspace";
 import type { GrokSubscription, RuntimeStatus, ThemePreference } from "../types";
 
 interface FeaturePanelProps {
-  kind: "plugins" | "mcp" | "settings";
   theme: ThemePreference;
   onThemeChange: (theme: ThemePreference) => void;
   workspacePath: string;
   onChooseWorkspace: () => void;
+  workspaceSwitchDisabled: boolean;
   runtime: RuntimeStatus | null;
   subscription: GrokSubscription | null;
   connected: boolean;
@@ -42,11 +40,11 @@ function formatPeriodEnd(value: string | null | undefined) {
 }
 
 export function FeaturePanel({
-  kind,
   theme,
   onThemeChange,
   workspacePath,
   onChooseWorkspace,
+  workspaceSwitchDisabled,
   runtime,
   subscription,
   connected,
@@ -84,43 +82,11 @@ export function FeaturePanel({
     ? subscriptionPlaceholder
     : formatPeriodEnd(subscription?.periodEnd);
 
-  if (kind === "plugins") {
-    return (
-      <main className="feature-panel">
-        <header className="feature-panel__header">
-          <span className="feature-panel__icon"><PuzzlePiece size={22} /></span>
-          <div><h1>Plugins</h1><p>Extend Grok Build without leaving the task workspace.</p></div>
-        </header>
-        <section className="feature-empty-state">
-          <span><PuzzlePiece size={24} /></span>
-          <h2>Plugin discovery is not connected yet</h2>
-          <p>This page will list only plugins reported by the real Grok Runtime. No sample plugins are shown.</p>
-        </section>
-      </main>
-    );
-  }
-
-  if (kind === "mcp") {
-    return (
-      <main className="feature-panel">
-        <header className="feature-panel__header">
-          <span className="feature-panel__icon"><PlugsConnected size={22} /></span>
-          <div><h1>MCP servers</h1><p>Tools and context exposed to the active Grok Build session.</p></div>
-        </header>
-        <section className="feature-empty-state">
-          <span><PlugsConnected size={24} /></span>
-          <h2>MCP discovery is not connected yet</h2>
-          <p>This page will reflect servers exposed by the official ACP session. No sample connections are shown.</p>
-        </section>
-      </main>
-    );
-  }
-
   return (
     <main className="feature-panel feature-panel--settings">
       <header className="feature-panel__header">
         <div><h1>Settings</h1><p>Runtime、Grok 账号、订阅与界面偏好。</p></div>
-        <span className="version-chip">GrokDesk v0.1.8</span>
+        <span className="version-chip">GrokDesk v0.1.9</span>
       </header>
 
       {preview ? (
@@ -145,7 +111,14 @@ export function FeaturePanel({
         <div className="workspace-path">
           <FolderOpen size={18} />
           <span title={workspacePath || undefined}>{workspacePath || "No project folder selected"}</span>
-          <button type="button" className="secondary-button" onClick={onChooseWorkspace}>Choose folder</button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onChooseWorkspace}
+            disabled={workspaceSwitchDisabled}
+          >
+            Choose folder
+          </button>
         </div>
       </section>
 

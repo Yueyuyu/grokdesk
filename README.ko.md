@@ -1,0 +1,152 @@
+<p align="center">
+  <img src="src/assets/grokdesk-icon.png" width="88" alt="GrokDesk 아이콘" />
+</p>
+
+<h1 align="center">GrokDesk</h1>
+
+<p align="center">공식 Grok Build를 명확하고 검토 가능한 Windows 데스크톱 작업 공간에서 사용하세요.</p>
+
+<p align="center">
+  <a href="README.md">简体中文</a> ·
+  <a href="README.en.md">English</a> ·
+  <a href="README.ja.md">日本語</a> ·
+  <strong>한국어</strong> ·
+  <a href="README.de.md">Deutsch</a>
+</p>
+
+<p align="center">
+  <img alt="버전 0.1.9" src="https://img.shields.io/badge/version-0.1.9-2563eb" />
+  <img alt="Windows" src="https://img.shields.io/badge/platform-Windows-2563eb" />
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-16a34a" /></a>
+</p>
+
+> [!IMPORTANT]
+> GrokDesk는 독립적인 비공식 오픈 소스 프로젝트입니다. xAI와 제휴하거나 후원 또는 공식 승인을 받은 프로젝트가 아닙니다. “Grok”, “Grok Build” 및 관련 상표의 권리는 각 소유자에게 있습니다.
+
+![GrokDesk 3개 패널 작업 공간](docs/design/grokdesk-implementation-1440x1024.png)
+
+## GrokDesk를 만드는 이유
+
+Agent 자체는 공식 Grok Build CLI를 그대로 사용합니다. GrokDesk는 인증이나 Agent를 다시 구현하지 않고, 작업 기록, 스트리밍 응답, 계획, Tools, 권한 확인, Git 변경 사항과 터미널 문맥을 하나의 3개 패널 데스크톱 환경에 모읍니다.
+
+## 주요 기능
+
+| 기능 | 현재 동작 |
+| --- | --- |
+| 실제 ACP 세션 | 공식 `grok agent stdio`를 실행하고 `session/new`, `session/load`, 스트리밍 업데이트, 취소, 권한 확인을 지원 |
+| 최적화된 응답 | GFM Markdown의 제목, 목록, 작업 목록, 링크, 표, 인용문, 인라인 코드와 복사 가능한 코드 블록을 안전하게 렌더링 |
+| 안정적인 읽기 | 응답 영역이 독립적으로 스크롤되며, 사용자가 위로 이동한 뒤에는 스트리밍 출력이 강제로 아래로 끌어내리지 않음. “Back to latest”로 추적 재개 |
+| 고정 Tools 도크 | Tools를 입력창 바로 위에 고정하고 최근 5개를 기본 표시하며 전체 활동을 펼쳐 볼 수 있음 |
+| 파일과 이미지 | 다중 선택, 드래그 앤 드롭, 미리 보기, 제거, 첨부 전용 전송을 지원하며 실제 ACP image/resource로 전송 |
+| 작업 공간 검토 | 프로젝트 폴더 명시 선택, 실제 Git 상태와 Unified Diff, 파일별 stage/unstage, 확인 후 revert |
+| 실제 작업 공간 터미널 | 선택한 프로젝트에서 PowerShell을 실행하고 stdout/stderr, 명령 기록, 프로세스 트리 중지, 별도 ACP 로그 보기를 지원 |
+| Runtime과 로그인 | 공식 Grok Runtime 원클릭 설치 및 `grok login --oauth` 인증 |
+| Plugins와 MCP | 공식 Runtime이 제공하는 실제 Plugin, Marketplace, MCP 구성을 조회하고 관리 |
+| 로컬 작업 기록 | 작업 공간별로 작업, 메시지, 계획, Tools, ACP Session ID를 저장하며 첨부 내용은 저장하지 않음 |
+| 데스크톱 셸 | 단일 인스턴스, 크기 조절 가능한 3개 패널, 접이식 Inspector, Light/Dark/System 테마, Windows 바탕 화면 바로 가기 |
+
+### 첨부 파일 제한
+
+- 최대 8개, 파일당 8 MiB, 전체 24 MiB까지 지원합니다.
+- 이미지는 ACP `image`, 텍스트와 기타 파일은 ACP `resource` 블록을 사용합니다.
+- 활성 ACP 초기화 결과의 `promptCapabilities`를 확인합니다. 공식 Runtime이 필요한 기능을 제공하지 않으면 전송 실패를 명확히 표시합니다.
+- 작업 기록에는 파일 이름, MIME 유형, 크기와 종류만 저장하며 본문이나 Base64 데이터는 저장하지 않습니다.
+- 브라우저 미리 보기는 인터페이스만 시연하며 실제 Grok 계정으로 첨부 파일을 보내지 않습니다.
+
+## 설치와 첫 실행
+
+Windows 사용자는 [GitHub Releases](https://github.com/Yueyuyu/grokdesk/releases)에서 최신 설치 파일을 받을 수 있습니다. 설치가 끝나면 GrokDesk 바탕 화면 바로 가기가 자동으로 생성됩니다.
+
+첫 실행 순서:
+
+1. **Install Runtime**을 선택해 xAI 공식 HTTPS 설치 프로그램을 실행합니다.
+2. **Sign in with Grok**을 선택하고 시스템 브라우저에서 공식 OAuth를 완료합니다.
+3. 프로젝트 폴더를 선택한 뒤 작업을 만들거나 엽니다.
+4. 필요하면 Onboarding 또는 Settings에서 공식 SuperGrok 관리 페이지를 엽니다.
+
+Grok Build를 먼저 수동으로 내려받거나 실행할 필요가 없습니다. OAuth 자격 증명은 공식 CLI가 관리하며 GrokDesk는 Token을 저장하지 않습니다.
+
+> [!NOTE]
+> 구독과 사용량은 공식 CLI가 billing 데이터를 실제로 반환할 때만 표시됩니다. 그렇지 않으면 GrokDesk는 제한을 명확히 알리고 가짜 값 대신 공식 관리 페이지를 제공합니다.
+
+## 작동 방식
+
+```mermaid
+flowchart LR
+  UI[React 데스크톱 UI] -->|Tauri commands| Native[Rust 네이티브 브리지]
+  Native -->|JSON-RPC / stdio| CLI[공식 Grok Build CLI]
+  CLI -->|OAuth 및 모델 서비스| XAI[xAI]
+  Native --> Git[로컬 Git 작업 공간]
+```
+
+네이티브 계층은 프로세스 수명 주기, ACP 메시지, 시스템 브라우저, Runtime 설치와 Git 작업을 담당합니다. React 계층은 작업, 대화, Tools, 첨부, 검토와 설정을 담당합니다. 공식 Agent를 복제하거나 별도의 Grok 서비스를 구현하지 않습니다.
+
+## 로컬 개발
+
+### 요구 사항
+
+- Windows 10/11
+- Node.js 20+
+- Rust stable(MSVC toolchain)
+- **Desktop development with C++**가 포함된 Visual Studio 2022 Build Tools
+- WebView2 Runtime
+
+### 실행
+
+```powershell
+npm ci
+npm run tauri:dev
+```
+
+React UI만 브라우저에서 미리 보기:
+
+```powershell
+npm run dev
+```
+
+브라우저 미리 보기에는 Runtime, 로그인, Tools 및 첨부 결과가 시뮬레이션임을 명확히 표시합니다. 로컬 파일, 실제 계정, 실제 ACP는 설치 버전 또는 Tauri 개발 버전에서만 접근합니다.
+
+### 검증
+
+```powershell
+npm test
+npm run build
+cargo check --manifest-path src-tauri/Cargo.toml
+npm run tauri:build
+```
+
+번들은 `src-tauri/target/release/bundle/`에 생성됩니다.
+
+## 개인정보 보호와 보안
+
+- OAuth 자격 증명은 공식 Grok CLI가 저장하고 갱신합니다.
+- GrokDesk는 OAuth Token을 읽거나 표시하거나 영구 저장하지 않습니다.
+- Runtime 설치는 사용자가 명시적으로 클릭한 뒤에만 공식 `https://x.ai/cli/install.ps1`을 실행합니다.
+- ACP와 Git 작업은 사용자가 명시적으로 선택한 폴더로 제한됩니다.
+- 작업 공간 터미널은 사용자가 직접 입력한 명령만 실행하며 출력은 현재 앱 세션에만 유지되고 작업 기록에는 저장되지 않습니다.
+- 첨부 내용은 현재 전송 회차에만 인코딩되며 작업 기록에 저장되지 않습니다.
+- 파일 revert는 항상 확인을 요구하며 자동 일괄 롤백을 수행하지 않습니다.
+- Markdown 원시 HTML은 비활성화되고 외부 링크는 격리된 새 창 동작을 사용합니다.
+
+## 현재 제한과 로드맵
+
+- 현재 Windows를 우선 지원하며 macOS/Linux 공식 번들은 아직 없습니다.
+- Runtime 원클릭 설치는 현재 Windows 전용입니다.
+- 첨부 지원은 설치된 공식 Runtime의 ACP 기능에 따라 달라집니다.
+- 구독과 사용량 표시는 공식 CLI의 billing 메서드에 따라 달라집니다.
+- 구조화된 테스트 결과 수집, 기기 간 동기화, 더 완전한 세션 내보내기는 향후 계획입니다.
+
+## 기여
+
+Issue와 Pull Request를 환영합니다. 각 PR은 하나의 논리적 변경에 집중하고 제출 전에 관련 테스트와 빌드를 실행해 주세요. 공개 Issue에 Token, 계정 정보 또는 비공개 작업 공간 내용을 포함하지 마세요.
+
+## 디자인 자료
+
+- [비주얼 소스](docs/design/grokdesk-light-concept.png)
+- [구현 인벤토리](docs/design/implementation-inventory.md)
+- [비주얼 QA 기록](design-qa.md)
+- [Imagegen 에셋 기록](docs/design/imagegen-assets.md)
+
+## License
+
+[MIT](LICENSE)

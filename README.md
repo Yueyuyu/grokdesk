@@ -1,109 +1,151 @@
-# GrokDesk
+<p align="center">
+  <img src="src/assets/grokdesk-icon.png" width="88" alt="GrokDesk 图标" />
+</p>
 
-GrokDesk 是一个面向 Windows 的开源桌面客户端，通过 ACP 把官方 Grok Build CLI 的真实任务对话、计划、工具活动和运行上下文集中到一个三栏工作台中。
+<h1 align="center">GrokDesk</h1>
+
+<p align="center">把官方 Grok Build 带进一个清晰、可审核的 Windows 桌面工作区。</p>
+
+<p align="center">
+  <strong>简体中文</strong> ·
+  <a href="README.en.md">English</a> ·
+  <a href="README.ja.md">日本語</a> ·
+  <a href="README.ko.md">한국어</a> ·
+  <a href="README.de.md">Deutsch</a>
+</p>
+
+<p align="center">
+  <img alt="版本 0.1.9" src="https://img.shields.io/badge/version-0.1.9-2563eb" />
+  <img alt="Windows" src="https://img.shields.io/badge/platform-Windows-2563eb" />
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-16a34a" /></a>
+</p>
 
 > [!IMPORTANT]
 > GrokDesk 是独立、非官方的开源项目，与 xAI 不存在隶属、赞助或官方认可关系。“Grok”“Grok Build”和相关商标归其各自权利人所有。
 
-![GrokDesk light interface design reference](docs/design/grokdesk-implementation-1440x1024.png)
+![GrokDesk 三栏任务工作台](docs/design/grokdesk-implementation-1440x1024.png)
 
-## 能做什么
+## 为什么做 GrokDesk
 
-- 新建、搜索、重命名、删除和切换多个真实任务，并按工作区在本机持久化任务标题、对话、计划和工具活动。
-- 为每个任务保存官方 ACP Session ID，重启或切回任务时通过 `session/load` 恢复 Grok Build 上下文。
-- 发送新指令、接收流式回复、自动滚动到最新回复、取消或重试当前回合，并处理 ACP 权限确认与失败后的会话重连。
-- 显式选择并记住项目文件夹；没有选定文件夹时不会把程序当前目录当成工作区。
-- 在 Changes 中读取真实 Git 状态和统一 Diff，可将单个文件接受到 Git 暂存区、撤销接受，或在二次确认后回滚该文件。
-- 在 Changes、Terminal、Context 之间切换；Terminal、Context、Git 分支、仓库根目录和变更数量均来自真实状态。
-- 拖动左右分栏，折叠检查器，并在窄屏下自动切换为抽屉式检查器。
-- 提供 Light、Dark、System 三套共享主题映射。
-- 通过官方 Grok CLI 登录和运行，不在 GrokDesk 中保存 OAuth Token。
-- 首次启动可一键安装官方 Grok Runtime，并直接进入官方 OAuth 与 SuperGrok 订阅入口。
+Grok Build 的 Agent 能力来自官方 CLI；GrokDesk 不重新实现它。这个项目专注于补齐桌面使用体验：把任务历史、流式回复、计划、Tools、权限确认、Git 变更和终端上下文放进同一个三栏工作台，同时保留官方认证和运行时边界。
+
+## 功能亮点
+
+| 能力 | 当前行为 |
+| --- | --- |
+| 真实 ACP 会话 | 启动官方 `grok agent stdio`，支持 `session/new`、`session/load`、流式更新、取消和权限确认 |
+| 优化后的回答 | 安全渲染 GFM Markdown，包括标题、列表、任务列表、链接、表格、引用、行内代码和可复制代码块 |
+| 稳定阅读体验 | 回答区独立顺滑滚动；用户上滚后不会被流式输出强行拉回，并提供“Back to latest” |
+| 固定 Tools 底栏 | Tools 固定在输入框上方，默认展示最近 5 项，可展开查看完整活动 |
+| 文件与图片 | 支持“＋”多选、拖放、缩略图、移除和仅附件发送；通过 ACP 图片或嵌入资源真实发送 |
+| 工作区审核 | 显式选择项目文件夹，读取真实 Git 状态和统一 Diff，逐文件暂存、取消暂存或确认后回滚 |
+| 真实工作区终端 | 在所选项目中运行 PowerShell，实时区分 stdout/stderr，支持历史命令、停止进程树，并保留独立 ACP 日志视图 |
+| Runtime 与登录 | 首次启动可一键安装官方 Grok Runtime，并通过 `grok login --oauth` 登录 |
+| Plugins 与 MCP | 从官方 Grok Runtime 读取并管理真实 Plugins、Marketplace 和 MCP 配置，不伪造本机状态 |
+| 本机任务历史 | 按工作区保存任务、消息、计划、Tools 和 ACP Session ID；附件内容不会写入历史 |
+| 桌面体验 | 单实例、可调三栏、可折叠检查器、Light/Dark/System 主题和 Windows 桌面快捷方式 |
+
+### 附件边界
+
+- 最多 8 个附件，单个不超过 8 MiB，总计不超过 24 MiB。
+- 图片使用 ACP `image` 内容块；文本与其他文件使用 ACP `resource` 内容块。
+- GrokDesk 会读取当前 ACP 初始化结果中的 `promptCapabilities`。官方 Runtime 未公开对应能力时会明确报错，不会假装发送成功。
+- 任务历史只保存附件名称、MIME 类型、大小和类别，不保存文件正文或 Base64 数据。
+- 浏览器开发预览只演示交互，不会把附件发送到真实 Grok 账号。
 
 ## 安装与首次启动
 
-从 [GitHub Releases](https://github.com/Yueyuyu/grokdesk/releases) 下载最新的 Windows `.exe` 安装包。安装完成后，GrokDesk 会自动创建桌面快捷方式。
+Windows 用户可前往 [GitHub Releases](https://github.com/Yueyuyu/grokdesk/releases) 下载最新安装包。安装完成后会自动创建 GrokDesk 桌面快捷方式。
 
-首次打开时按界面完成三步即可：
+首次打开按界面完成以下步骤：
 
-1. 点击“安装 Runtime”，由 GrokDesk 执行 xAI 官方 HTTPS 安装脚本。
-2. 点击“使用 Grok 登录”，在官方 OAuth 页面登录或切换账号。
-3. 如需订阅，点击“查看方案”或在 Settings 中打开官方 SuperGrok 页面。若当前官方 CLI 未开放套餐与额度接口，GrokDesk 会明确说明并引导到官方管理页。
+1. 点击 **Install Runtime**，由 GrokDesk 执行 xAI 官方 HTTPS 安装脚本。
+2. 点击 **Sign in with Grok**，在系统浏览器中完成官方 OAuth。
+3. 选择一个项目文件夹，然后创建或打开任务。
+4. 如需订阅，在 Onboarding 或 Settings 中打开官方 SuperGrok 管理页。
 
-不需要预先下载或手动打开 Grok Build。浏览器中的开发预览只模拟安装和登录状态，并会明确标注；真实安装与认证只发生在桌面应用中。
+不需要先手动下载或打开 Grok Build。OAuth 凭据始终由官方 CLI 管理，GrokDesk 不保存 Token。
 
-## 运行方式
+> [!NOTE]
+> 套餐和额度只在官方 CLI 实际返回 billing 数据时显示；否则 GrokDesk 会明确说明限制并提供官方管理入口，不会编造套餐或用量。
 
-GrokDesk 不重新实现 Grok Build Agent。原生端会：
+## 工作方式
 
-1. 探测 grok 可执行文件及版本；缺失时可在界面内运行官方安装脚本。
-2. 通过官方命令 grok login --oauth 完成登录。
-3. 启动 grok agent stdio。
-4. 通过 ACP 执行 initialize、session/new、session/load、session/prompt，并处理流式 session/update、权限请求和取消。
+```mermaid
+flowchart LR
+  UI[React 桌面界面] -->|Tauri commands| Native[Rust 原生桥接]
+  Native -->|JSON-RPC / stdio| CLI[官方 Grok Build CLI]
+  CLI -->|OAuth 与模型服务| XAI[xAI]
+  Native --> Git[本机 Git 工作区]
+```
 
-如果命令行环境需要手动登录，等价的官方命令是：
-
-~~~powershell
-grok login --oauth
-~~~
-
-## 技术栈
-
-- Tauri 2
-- React 19 + TypeScript
-- Vite 6
-- Rust
-- ACP over stdio
-- Phosphor Icons
-- Inter
+原生端负责进程生命周期、ACP 消息、系统浏览器、Runtime 安装和 Git 操作；React 端负责任务、对话、Tools、附件、审核与设置界面。项目不会复制官方 Agent，也不会在仓库内实现另一套 Grok 服务。
 
 ## 本地开发
 
-需要 Windows 10/11、Node.js 20+、Rust stable 和 Tauri 的 Windows 构建依赖。官方 grok CLI 可由应用首次启动流程安装。
+### 环境要求
 
-~~~powershell
+- Windows 10/11
+- Node.js 20+
+- Rust stable（MSVC toolchain）
+- Visual Studio 2022 Build Tools，勾选 **Desktop development with C++**
+- WebView2 Runtime
+
+### 启动
+
+```powershell
 npm ci
+npm run tauri:dev
+```
+
+只预览 React 界面：
+
+```powershell
 npm run dev
-~~~
+```
 
-常用校验：
+浏览器预览会明确标记模拟的 Runtime、登录、Tools 和附件结果；本机文件、真实账号与真实 ACP 只在安装版/Tauri 开发版中访问。
 
-~~~powershell
+### 校验
+
+```powershell
 npm test
 npm run build
 cargo check --manifest-path src-tauri/Cargo.toml
 npm run tauri:build
-~~~
+```
 
-安装包会生成到 src-tauri/target/release/bundle/ 下。
-
-## 设计与 Imagegen 资产
-
-- 视觉源：docs/design/grokdesk-light-concept.png
-- 最终实现：docs/design/grokdesk-implementation-1440x1024.png
-- 完整并排对照：docs/design/grokdesk-design-comparison.png
-- 局部对照：docs/design/grokdesk-focused-comparison.png
-- 品牌图标：src/assets/grokdesk-icon.png
-
-概念图和品牌图标通过内置 Imagegen 工作流生成。完整提示词与资产用途记录在 [docs/design/imagegen-assets.md](docs/design/imagegen-assets.md)；视觉验收记录见 [design-qa.md](design-qa.md)。
+安装包生成在 `src-tauri/target/release/bundle/`。
 
 ## 隐私与安全
 
-- OAuth 凭据由官方 Grok CLI 管理。
-- GrokDesk 不读取、不展示，也不持久化 OAuth Token。
-- Runtime 安装只在用户点击后执行官方 `https://x.ai/cli/install.ps1` 脚本。
-- 工作区路径和任务内容只在用户触发 ACP 会话时发送给本机 Grok CLI。
-- Git 状态、Diff 和单文件审核动作由本机 GrokDesk 原生端执行，不上传到 GrokDesk 服务。
-- 请勿把密钥、Token 或生产环境凭据提交到仓库。
+- OAuth 凭据由官方 Grok CLI 保存和刷新。
+- GrokDesk 不读取、不展示、也不持久化 OAuth Token。
+- Runtime 安装仅在用户点击后执行官方 `https://x.ai/cli/install.ps1`。
+- 只有用户显式选择的工作区会用于 ACP 和 Git 操作。
+- 工作区终端只执行用户主动输入的命令；输出仅保留在当前应用会话，不写入任务历史。
+- 附件只在当前发送回合中编码；内容不进入 `localStorage` 任务历史。
+- 回滚文件始终要求二次确认，不执行自动批量回滚。
+- Markdown 不启用原始 HTML，外部链接使用隔离的新窗口行为。
 
-## 当前限制
+## 当前限制与路线图
 
-- 目前优先支持 Windows 桌面端。
-- 一键 Runtime 安装目前仅在 Windows 桌面端提供。
-- 完整的真实提示流需要有效的 Grok OAuth 登录；登录过期时，ACP initialize 仍可成功，但 session/new 会被官方 CLI 拒绝。
-- Changes 需要所选文件夹位于 Git 仓库内；“接受”表示 `git add` 当前文件，“回滚”会丢弃该文件的工作区修改或删除未跟踪文件，因此始终要求二次确认。
-- 测试结果结构化采集、附件、插件发现和 MCP 配置尚未接入；相关页面不会展示虚构数据。
-- 套餐与额度只在官方 Grok CLI 实际提供 billing 数据时显示，否则使用官方 SuperGrok 管理入口。
+- 当前优先支持 Windows；macOS 与 Linux 尚无正式安装包。
+- 一键 Runtime 安装目前仅支持 Windows。
+- 附件类型最终受已安装官方 Grok Runtime 的 ACP 能力约束。
+- 套餐与额度受官方 CLI 是否提供 billing 接口约束。
+- 测试结果的结构化采集、跨设备同步和更完整的会话导出仍在规划中。
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request。请让每个 PR 聚焦一个逻辑改动，并在提交前运行相关测试与构建。安全问题请避免在公开 Issue 中附带 Token、账号信息或私有项目内容。
+
+## 设计资料
+
+- [视觉源图](docs/design/grokdesk-light-concept.png)
+- [实现清单](docs/design/implementation-inventory.md)
+- [视觉验收记录](design-qa.md)
+- [Imagegen 资产说明](docs/design/imagegen-assets.md)
 
 ## License
 

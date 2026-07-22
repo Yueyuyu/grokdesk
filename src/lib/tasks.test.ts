@@ -9,7 +9,6 @@ import {
   groupTasks,
   parseTaskStore,
   renameTask,
-  serializeTaskStore,
   workspaceStorageKey,
 } from "./tasks";
 
@@ -38,7 +37,7 @@ describe("task persistence", () => {
       id: "task-1",
       now: new Date("2026-07-21T01:00:00.000Z"),
     });
-    const raw = serializeTaskStore({
+    const raw = JSON.stringify({
       version: 1,
       activeTaskIds: { [workspaceStorageKey(task.workspacePath)]: task.id },
       tasks: [
@@ -53,6 +52,15 @@ describe("task persistence", () => {
               name: "Grok Build",
               time: "09:30",
               content: "Saved reply",
+              attachments: [
+                {
+                  name: "context.md",
+                  mimeType: "text/markdown",
+                  size: 512,
+                  kind: "text",
+                  data: "must-not-survive",
+                },
+              ],
               streaming: true,
             },
           ],
@@ -66,6 +74,14 @@ describe("task persistence", () => {
       acpSessionId: "session-123",
     });
     expect(restored.tasks[0].messages[0].streaming).toBe(false);
+    expect(restored.tasks[0].messages[0].attachments).toEqual([
+      {
+        name: "context.md",
+        mimeType: "text/markdown",
+        size: 512,
+        kind: "text",
+      },
+    ]);
   });
 
   it("falls back safely for malformed or unsupported storage", () => {
@@ -101,6 +117,14 @@ describe("task presentation", () => {
           name: "You",
           time: "10:00",
           content: "Show the unified patch",
+          attachments: [
+            {
+              name: "architecture.png",
+              mimeType: "image/png",
+              size: 1_024,
+              kind: "image" as const,
+            },
+          ],
         },
       ],
     };
@@ -111,6 +135,11 @@ describe("task presentation", () => {
     expect(filterTasks([oauthTask, diffTask], "PATCH").map((task) => task.id)).toEqual([
       "diff",
     ]);
+    expect(
+      filterTasks([oauthTask, diffTask], "architecture.png").map(
+        (task) => task.id,
+      ),
+    ).toEqual(["diff"]);
   });
 
   it("renames and deletes tasks while preserving one active workspace task", () => {

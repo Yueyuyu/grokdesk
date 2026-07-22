@@ -1,17 +1,22 @@
-import { CaretLeft, Trash } from "@phosphor-icons/react";
+import { CaretLeft } from "@phosphor-icons/react";
 import type { WorkspaceChangesController } from "../hooks/useWorkspaceChanges";
+import type { WorkspaceTerminalController } from "../hooks/useWorkspaceTerminal";
 import type { GrokTask, InspectorTab } from "../types";
 import { WorkspaceChangesPanel } from "./WorkspaceChangesPanel";
+import { WorkspaceTerminalPanel } from "./WorkspaceTerminalPanel";
 
 interface InspectorProps {
   activeTab: InspectorTab;
   onTabChange: (tab: InspectorTab) => void;
   terminalLines: string[];
   onClearTerminal: () => void;
+  terminal: WorkspaceTerminalController;
+  preview: boolean;
   onCollapse: () => void;
   sessionId: string | null;
   task: GrokTask | null;
   workspacePath: string;
+  workspaceReady: boolean;
   workspace: WorkspaceChangesController;
   onChooseWorkspace: () => void;
 }
@@ -27,10 +32,13 @@ export function Inspector({
   onTabChange,
   terminalLines,
   onClearTerminal,
+  terminal,
+  preview,
   onCollapse,
   sessionId,
   task,
   workspacePath,
+  workspaceReady,
   workspace,
   onChooseWorkspace,
 }: InspectorProps) {
@@ -73,24 +81,14 @@ export function Inspector({
       ) : null}
 
       {activeTab === "terminal" ? (
-        <div className="terminal-panel">
-          <header>
-            <span>ACP Terminal</span>
-            <button
-              type="button"
-              className="icon-button"
-              onClick={onClearTerminal}
-              aria-label="Clear terminal"
-            >
-              <Trash size={16} />
-            </button>
-          </header>
-          <pre>
-            {terminalLines.length
-              ? terminalLines.join("\n")
-              : "Real ACP and runtime output will appear here."}
-          </pre>
-        </div>
+        <WorkspaceTerminalPanel
+          terminal={terminal}
+          runtimeLines={terminalLines}
+          onClearRuntime={onClearTerminal}
+          workspacePath={workspacePath}
+          workspaceReady={workspaceReady}
+          preview={preview}
+        />
       ) : null}
 
       {activeTab === "context" ? (

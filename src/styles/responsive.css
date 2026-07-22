@@ -30,10 +30,19 @@
   .composer {
     width: min(100%, 760px);
   }
+
+  .tools-module {
+    width: min(100%, 760px);
+  }
 }
 
 @media (max-width: 880px) {
   :root {
+    --sidebar-width: 72px !important;
+  }
+
+  .app-grid,
+  .app-grid.inspector-is-collapsed {
     --sidebar-width: 72px !important;
   }
 
@@ -104,7 +113,8 @@
 
   .task-header {
     min-height: 94px;
-    padding-inline: 20px;
+    padding-right: 66px;
+    padding-left: 20px;
   }
 
   .task-header__actions .secondary-button {
@@ -118,11 +128,24 @@
   }
 
   .tool-strip {
-    grid-template-columns: repeat(3, minmax(72px, 1fr));
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
   }
 
-  .tool-item:nth-child(n + 4) {
-    display: none;
+  .tool-item {
+    min-width: 108px;
+    flex: 1 0 108px;
+    scroll-snap-align: start;
+  }
+
+  .extension-card {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .extension-card__actions {
+    grid-column: 2;
+    justify-self: start;
   }
 }
 
@@ -216,8 +239,22 @@
     white-space: normal;
   }
 
+  .tools-dock {
+    padding: 7px 8px 6px;
+  }
+
+  .tools-module__header {
+    height: 31px;
+  }
+
   .tools-module {
-    display: none;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .tool-strip {
+    min-height: 52px;
+    padding-block: 7px;
   }
 
   .composer-dock {
@@ -230,6 +267,15 @@
 
   .composer textarea {
     min-height: 54px;
+  }
+
+  .composer__attachments {
+    max-height: 98px;
+    padding: 7px 8px 2px;
+  }
+
+  .attachment-chip {
+    width: min(170px, 100%);
   }
 
   .composer__toolbar {
@@ -288,6 +334,57 @@
 
   .feature-panel__header .primary-button {
     margin-left: 56px;
+  }
+
+  .extension-panel__header {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .extension-header-actions {
+    grid-column: 2;
+    flex-wrap: wrap;
+  }
+
+  .extension-panel__header .primary-button {
+    margin-left: 0;
+  }
+
+  .extension-toolbar {
+    grid-template-columns: minmax(0, 1fr) 32px;
+  }
+
+  .extension-tabs {
+    grid-column: 1 / -1;
+  }
+
+  .extension-card {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .extension-card__icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .extension-card__title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .extension-card__actions {
+    grid-column: 2;
+    flex-wrap: wrap;
+  }
+
+  .extension-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .extension-form-grid__full {
+    grid-column: 1;
   }
 
   .settings-row {

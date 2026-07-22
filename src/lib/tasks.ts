@@ -1,4 +1,5 @@
 import type {
+  ChatAttachmentSummary,
   ChatEntry,
   GrokTask,
   PlanStep,
@@ -45,6 +46,12 @@ const toolStatuses = new Set<ToolActivity["status"]>([
   "failed",
 ]);
 
+const attachmentKinds = new Set<ChatAttachmentSummary["kind"]>([
+  "image",
+  "text",
+  "binary",
+]);
+
 const createId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -66,6 +73,29 @@ const safeIsoDate = (value: unknown) => {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
+const parseAttachmentSummary = (value: unknown): ChatAttachmentSummary | null => {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const name = safeString(candidate.name, "", 255).trim();
+  const mimeType = safeString(
+    candidate.mimeType,
+    "application/octet-stream",
+    160,
+  );
+  const size = Number(candidate.size);
+  const kind = attachmentKinds.has(candidate.kind as ChatAttachmentSummary["kind"])
+    ? (candidate.kind as ChatAttachmentSummary["kind"])
+    : null;
+  if (!name || !kind || !Number.isFinite(size) || size < 0) return null;
+
+  return {
+    name,
+    mimeType,
+    size: Math.min(size, 24 * 1024 * 1024),
+    kind,
+  };
+};
+
 const parseMessage = (value: unknown): ChatEntry | null => {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
@@ -85,6 +115,15 @@ const parseMessage = (value: unknown): ChatEntry | null => {
     ),
     time: safeString(candidate.time, "", 80),
     content: safeString(candidate.content),
+    attachments: Array.isArray(candidate.attachments)
+      ? candidate.attachments
+          .slice(0, 8)
+          .map(parseAttachmentSummary)
+          .filter(
+            (attachment): attachment is ChatAttachmentSummary =>
+              attachment !== null,
+          )
+      : undefined,
     streaming: candidate.streaming === true,
   };
 };
@@ -253,8 +292,12 @@ export function filterTasks(tasks: GrokTask[], query: string) {
 
   return tasks.filter((task) => {
     if (task.title.toLocaleLowerCase().includes(normalized)) return true;
-    return task.messages.some((message) =>
-      message.content.toLocaleLowerCase().includes(normalized),
+    return task.messages.some(
+      (message) =>
+        message.content.toLocaleLowerCase().includes(normalized) ||
+        message.attachments?.some((attachment) =>
+          attachment.name.toLocaleLowerCase().includes(normalized),
+        ),
     );
   });
 }

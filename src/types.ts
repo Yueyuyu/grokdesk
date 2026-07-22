@@ -26,12 +26,111 @@ export interface GrokSubscription {
   message: string | null;
 }
 
+export interface GrokPluginSummary {
+  status: string;
+  name: string;
+  version: string | null;
+  description: string | null;
+  marketplace: string | null;
+  scope: string | null;
+  path: string | null;
+  enabled: boolean;
+  trusted: boolean | null;
+  skillCount: number;
+  commandCount: number;
+  agentCount: number;
+  hookCount: number;
+  mcpServerCount: number;
+}
+
+export interface GrokPluginCatalog {
+  plugins: GrokPluginSummary[];
+  marketplaceAvailable: boolean;
+  message: string | null;
+}
+
+export type McpTransport = "stdio" | "http" | "sse";
+export type McpScope = "user" | "project";
+
+export interface GrokMcpServerSummary {
+  name: string;
+  transport: string;
+  scope: string | null;
+  endpoint: string | null;
+  enabled: boolean;
+  status: string | null;
+  source: string | null;
+  toolCount: number;
+}
+
+export interface GrokMcpCatalog {
+  servers: GrokMcpServerSummary[];
+  message: string | null;
+}
+
+export interface AddMcpServerInput {
+  name: string;
+  transport: McpTransport;
+  scope: McpScope;
+  target: string;
+  args: string[];
+}
+
+export interface RuntimeCommandResult {
+  message: string;
+}
+
+export interface WorkspaceCommandOutput {
+  commandId: string;
+  stream: "stdout" | "stderr" | "system";
+  line: string;
+}
+
+export interface WorkspaceCommandResult {
+  commandId: string;
+  exitCode: number | null;
+  cancelled: boolean;
+  durationMs: number;
+}
+
+export type PromptAttachmentKind = "image" | "text" | "binary";
+
+export interface PromptCapabilities {
+  image: boolean;
+  audio: boolean;
+  embeddedContext: boolean;
+}
+
+export interface AcpSessionInfo {
+  sessionId: string;
+  promptCapabilities: PromptCapabilities;
+}
+
+/**
+ * 仅在当前发送回合中存在的附件内容。任务历史不会持久化 data 字段。
+ */
+export interface PromptAttachment {
+  name: string;
+  mimeType: string;
+  size: number;
+  kind: PromptAttachmentKind;
+  data: string;
+}
+
+export interface ChatAttachmentSummary {
+  name: string;
+  mimeType: string;
+  size: number;
+  kind: PromptAttachmentKind;
+}
+
 export interface ChatEntry {
   id: string;
   role: "user" | "agent";
   name: string;
   time: string;
   content: string;
+  attachments?: ChatAttachmentSummary[];
   streaming?: boolean;
 }
 

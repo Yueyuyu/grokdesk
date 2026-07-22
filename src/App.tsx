@@ -8,14 +8,17 @@ import {
 } from "react";
 import { FeaturePanel } from "./components/FeaturePanel";
 import { Inspector } from "./components/Inspector";
+import { McpPanel } from "./components/McpPanel";
 import { OnboardingPanel } from "./components/OnboardingPanel";
 import { PermissionDialog } from "./components/PermissionDialog";
+import { PluginPanel } from "./components/PluginPanel";
 import { Sidebar } from "./components/Sidebar";
 import { TaskWorkspace } from "./components/TaskWorkspace";
 import { TitleBar } from "./components/TitleBar";
 import { useGrokRuntime } from "./hooks/useGrokRuntime";
 import { useTaskStore } from "./hooks/useTaskStore";
 import { useWorkspaceChanges } from "./hooks/useWorkspaceChanges";
+import { useWorkspaceTerminal } from "./hooks/useWorkspaceTerminal";
 import { chooseWorkspace, isDesktopRuntime } from "./lib/desktop";
 import { getRuntimeSetupStep } from "./lib/runtime";
 import { isWorkspaceSelected } from "./lib/workspace";
@@ -88,7 +91,8 @@ export function App() {
     taskStore.activeTask,
     taskStore.updateTask,
   );
-  const workspace = useWorkspaceChanges(workspacePath, grok.busy);
+  const terminal = useWorkspaceTerminal(workspacePath);
+  const workspace = useWorkspaceChanges(workspacePath, grok.busy || terminal.running);
   const setupStep = getRuntimeSetupStep(grok.runtime);
   const preview = !isDesktopRuntime();
 
@@ -120,6 +124,7 @@ export function App() {
   }, [workspacePath]);
 
   const pickWorkspace = async () => {
+    if (terminal.running) return;
     const selected = await chooseWorkspace();
     if (!selected) return;
     if (grok.sessionId) await grok.disconnect();
@@ -144,12 +149,13 @@ export function App() {
           onNavigate={setActiveNavigation}
           workspaceLabel={workspaceLabel}
           onChooseWorkspace={() => void pickWorkspace()}
+          workspaceSwitchDisabled={terminal.running}
           runtime={grok.runtime}
           statusText={grok.statusText}
           onStatusClick={() => setActiveNavigation("settings")}
           tasks={taskStore.tasks}
           activeTaskId={taskStore.activeTaskId}
-          taskSwitchDisabled={grok.busy || !workspaceReady}
+          taskSwitchDisabled={grok.busy || terminal.running || !workspaceReady}
           onCreateTask={() => {
             taskStore.createTask();
             setActiveNavigation("tasks");
@@ -206,13 +212,29 @@ export function App() {
               onOpenSettings={() => setActiveNavigation("settings")}
             />
           )
+        ) : activeNavigation === "plugins" ? (
+          <PluginPanel
+            workspacePath={workspacePath}
+            runtimeAvailable={grok.runtime?.available === true}
+            preview={preview}
+            connected={Boolean(grok.sessionId)}
+            onOpenSettings={() => setActiveNavigation("settings")}
+          />
+        ) : activeNavigation === "mcp" ? (
+          <McpPanel
+            workspacePath={workspacePath}
+            runtimeAvailable={grok.runtime?.available === true}
+            preview={preview}
+            connected={Boolean(grok.sessionId)}
+            onOpenSettings={() => setActiveNavigation("settings")}
+          />
         ) : (
           <FeaturePanel
-            kind={activeNavigation}
             theme={theme}
             onThemeChange={setTheme}
             workspacePath={workspacePath}
             onChooseWorkspace={() => void pickWorkspace()}
+            workspaceSwitchDisabled={terminal.running}
             runtime={grok.runtime}
             subscription={grok.subscription}
             connected={Boolean(grok.sessionId)}
@@ -242,10 +264,13 @@ export function App() {
               onTabChange={setInspectorTab}
               terminalLines={grok.terminalLines}
               onClearTerminal={grok.clearTerminal}
+              terminal={terminal}
+              preview={preview}
               onCollapse={() => setInspectorCollapsed(true)}
               sessionId={grok.sessionId}
               task={taskStore.activeTask}
               workspacePath={workspacePath}
+              workspaceReady={workspaceReady}
               workspace={workspace}
               onChooseWorkspace={() => void pickWorkspace()}
             />

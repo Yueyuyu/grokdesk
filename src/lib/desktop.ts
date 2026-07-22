@@ -3,8 +3,16 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
+  AcpSessionInfo,
+  AddMcpServerInput,
+  GrokMcpCatalog,
+  GrokPluginCatalog,
   GrokSubscription,
+  McpScope,
+  PromptAttachment,
+  RuntimeCommandResult,
   RuntimeStatus,
+  WorkspaceCommandResult,
   WorkspaceDiff,
   WorkspaceSnapshot,
 } from "../types";
@@ -20,6 +28,14 @@ const SUBSCRIPTION_URL = "https://grok.com/supergrok?referrer=grok-build";
 
 const wait = (milliseconds: number) =>
   new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+
+const desktopOnlyRuntimeFeature = (feature: string): never => {
+  throw new Error(
+    `${feature} is available only in the installed GrokDesk desktop app.`,
+  );
+};
+
+const runtimeWorkspace = (cwd: string) => cwd.trim() || null;
 
 export interface OAuthResult {
   succeeded: boolean;
@@ -52,25 +68,34 @@ export async function probeRuntime(): Promise<RuntimeStatus> {
 export async function startAcpSession(
   cwd: string,
   resumeSessionId: string | null = null,
-): Promise<string> {
+): Promise<AcpSessionInfo> {
   if (!isDesktopRuntime()) {
-    return (
-      resumeSessionId ??
-      `browser-preview-${
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : Date.now()
-      }`
-    );
+    return {
+      sessionId:
+        resumeSessionId ??
+        `browser-preview-${
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : Date.now()
+        }`,
+      promptCapabilities: {
+        image: true,
+        audio: false,
+        embeddedContext: true,
+      },
+    };
   }
-  return invoke<string>("start_acp_session", { cwd, resumeSessionId });
+  return invoke<AcpSessionInfo>("start_acp_session", { cwd, resumeSessionId });
 }
 
-export async function sendAcpPrompt(text: string): Promise<void> {
+export async function sendAcpPrompt(
+  text: string,
+  attachments: PromptAttachment[] = [],
+): Promise<void> {
   if (!isDesktopRuntime()) {
     return;
   }
-  await invoke("send_acp_prompt", { text });
+  await invoke("send_acp_prompt", { text, attachments });
 }
 
 export async function cancelAcpTurn(): Promise<void> {
@@ -134,6 +159,127 @@ export async function openGrokSubscription(): Promise<void> {
   await invoke("open_grok_subscription");
 }
 
+export async function listGrokPlugins(cwd: string): Promise<GrokPluginCatalog> {
+  if (!isDesktopRuntime()) {
+    return {
+      plugins: [],
+      marketplaceAvailable: false,
+      message:
+        "浏览器预览不会读取或模拟本机插件；安装版会直接显示官方 Grok Runtime 的真实结果。",
+    };
+  }
+  return invoke<GrokPluginCatalog>("list_grok_plugins", {
+    cwd: runtimeWorkspace(cwd),
+  });
+}
+
+export async function installGrokPlugin(
+  cwd: string,
+  source: string,
+  trusted: boolean,
+): Promise<RuntimeCommandResult> {
+  if (!isDesktopRuntime()) desktopOnlyRuntimeFeature("Plugin installation");
+  return invoke<RuntimeCommandResult>("install_grok_plugin", {
+    cwd: runtimeWorkspace(cwd),
+    source,
+    trusted,
+  });
+}
+
+export async function setGrokPluginEnabled(
+  cwd: string,
+  name: string,
+  enabled: boolean,
+): Promise<RuntimeCommandResult> {
+  if (!isDesktopRuntime()) desktopOnlyRuntimeFeature("Plugin management");
+  return invoke<RuntimeCommandResult>("set_grok_plugin_enabled", {
+    cwd: runtimeWorkspace(cwd),
+    name,
+    enabled,
+  });
+}
+
+export async function updateGrokPlugin(
+  cwd: string,
+  name: string,
+): Promise<RuntimeCommandResult> {
+  if (!isDesktopRuntime()) desktopOnlyRuntimeFeature("Plugin updates");
+  return invoke<RuntimeCommandResult>("update_grok_plugin", {
+    cwd: runtimeWorkspace(cwd),
+    name,
+  });
+}
+
+export async function uninstallGrokPlugin(
+  cwd: string,
+  name: string,
+  keepData: boolean,
+): Promise<RuntimeCommandResult> {
+  if (!isDesktopRuntime()) desktopOnlyRuntimeFeature("Plugin removal");
+  return invoke<RuntimeCommandResult>("uninstall_grok_plugin", {
+    cwd: runtimeWorkspace(cwd),
+    name,
+    keepData,
+  });
+}
+
+export async function refreshGrokPluginMarketplaces(
+  cwd: string,
+): Promise<RuntimeCommandResult> {
+  if (!isDesktopRuntime()) desktopOnlyRuntimeFeature("Marketplace refresh");
+  return invoke<RuntimeCommandResult>("refresh_grok_plugin_marketplaces", {
+    cwd: runtimeWorkspace(cwd),
+  });
+}
+
+export async function listGrokMcpServers(cwd: string): Promise<GrokMcpCatalog> {
+  if (!isDesktopRuntime()) {
+    return {
+      servers: [],
+      message:
+        "浏览器预览不会读取或模拟本机 MCP 配置；安装版会直接显示官方 Grok Runtime 的真实结果。",
+    };
+  }
+  return invoke<GrokMcpCatalog>("list_grok_mcp_servers", {
+    cwd: runtimeWorkspace(cwd),
+  });
+}
+
+export async function addGrokMcpServer(
+  cwd: string,
+  input: AddMcpServerInput,
+): Promise<RuntimeCommandResult> {
+  if (!isDesktopRuntime()) desktopOnlyRuntimeFeature("MCP configuration");
+  return invoke<RuntimeCommandResult>("add_grok_mcp_server", {
+    cwd: runtimeWorkspace(cwd),
+    input,
+  });
+}
+
+export async function removeGrokMcpServer(
+  cwd: string,
+  name: string,
+  scope: McpScope,
+): Promise<RuntimeCommandResult> {
+  if (!isDesktopRuntime()) desktopOnlyRuntimeFeature("MCP configuration");
+  return invoke<RuntimeCommandResult>("remove_grok_mcp_server", {
+    cwd: runtimeWorkspace(cwd),
+    name,
+    scope,
+  });
+}
+
+export async function diagnoseGrokMcpServer(
+  cwd: string,
+  name: string,
+): Promise<RuntimeCommandResult> {
+  if (!isDesktopRuntime()) desktopOnlyRuntimeFeature("MCP diagnostics");
+  return invoke<RuntimeCommandResult>("diagnose_grok_mcp_server", {
+    cwd: runtimeWorkspace(cwd),
+    name,
+  });
+}
+
 export async function answerClientRequest(id: number, result: unknown): Promise<void> {
   if (!isDesktopRuntime()) {
     return;
@@ -195,6 +341,24 @@ export async function discardWorkspaceChange(
     return applyPreviewWorkspaceAction("discard", cwd, path);
   }
   return invoke<WorkspaceSnapshot>("discard_workspace_change", { cwd, path });
+}
+
+export async function runWorkspaceCommand(
+  cwd: string,
+  commandLine: string,
+  commandId: string,
+): Promise<WorkspaceCommandResult> {
+  if (!isDesktopRuntime()) desktopOnlyRuntimeFeature("Workspace terminal");
+  return invoke<WorkspaceCommandResult>("run_workspace_command", {
+    cwd,
+    commandLine,
+    commandId,
+  });
+}
+
+export async function cancelWorkspaceCommand(commandId: string): Promise<void> {
+  if (!isDesktopRuntime()) desktopOnlyRuntimeFeature("Workspace terminal");
+  await invoke("cancel_workspace_command", { commandId });
 }
 
 export function listenDesktopEvent<T>(

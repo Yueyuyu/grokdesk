@@ -1,4 +1,5 @@
-use serde::Serialize;
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -21,6 +22,10 @@ use tokio::{
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+const MAX_ATTACHMENTS: usize = 8;
+const MAX_ATTACHMENT_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENT_BYTES: u64 = 24 * 1024 * 1024;
+
 type PendingResponse = oneshot::Sender<Result<Value, String>>;
 
 #[derive(Default)]
@@ -29,7 +34,41 @@ pub struct GrokBridge {
     stdin: Arc<Mutex<Option<ChildStdin>>>,
     pending: Arc<Mutex<HashMap<u64, PendingResponse>>>,
     session_id: Arc<Mutex<Option<String>>>,
+    prompt_capabilities: Arc<Mutex<PromptCapabilities>>,
     next_id: AtomicU64,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptCapabilities {
+    image: bool,
+    audio: bool,
+    embedded_context: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcpSessionInfo {
+    session_id: String,
+    prompt_capabilities: PromptCapabilities,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum PromptAttachmentKind {
+    Image,
+    Text,
+    Binary,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptAttachment {
+    name: String,
+    mime_type: String,
+    size: u64,
+    kind: PromptAttachmentKind,
+    data: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -99,7 +138,7 @@ fn billing_method_unavailable(error: &str) -> bool {
     error.contains("-32601") || error.to_ascii_lowercase().contains("method not found")
 }
 
-fn grok_executable() -> Result<PathBuf, String> {
+pub(crate) fn grok_executable() -> Result<PathBuf, String> {
     if let Ok(path) = which::which("grok") {
         return Ok(path);
     }
@@ -115,7 +154,7 @@ fn grok_executable() -> Result<PathBuf, String> {
     })
 }
 
-fn hide_console(command: &mut Command) {
+pub(crate) fn hide_console(command: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -185,7 +224,7 @@ fn windows_system_proxy() -> Option<String> {
 }
 
 #[cfg(windows)]
-fn apply_windows_system_proxy(command: &mut Command) -> bool {
+pub(crate) fn apply_windows_system_proxy(command: &mut Command) -> bool {
     let Some(proxy) = windows_system_proxy() else {
         return false;
     };
@@ -206,7 +245,7 @@ fn apply_windows_system_proxy(command: &mut Command) -> bool {
 }
 
 #[cfg(not(windows))]
-fn apply_windows_system_proxy(_command: &mut Command) -> bool {
+pub(crate) fn apply_windows_system_proxy(_command: &mut Command) -> bool {
     false
 }
 
@@ -310,7 +349,7 @@ fn oauth_failure_message(lines: &[String]) -> String {
     )
 }
 
-fn canonical_workspace(cwd: &str) -> Result<PathBuf, String> {
+pub(crate) fn canonical_workspace(cwd: &str) -> Result<PathBuf, String> {
     let path = Path::new(cwd);
     path.canonicalize()
         .map_err(|error| format!("Workspace `{cwd}` is not accessible: {error}"))
@@ -362,6 +401,197 @@ async fn wait_for_configured_credentials() -> bool {
 #[tauri::command]
 pub async fn probe_runtime() -> RuntimeStatus {
     detect_runtime()
+}
+
+fn prompt_capabilities_from_initialize(initialize: &Value) -> PromptCapabilities {
+    let capabilities = initialize
+        .pointer("/agentCapabilities/promptCapabilities")
+        .or_else(|| initialize.pointer("/capabilities/promptCapabilities"));
+
+    PromptCapabilities {
+        image: capabilities
+            .and_then(|value| value.get("image"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        audio: capabilities
+            .and_then(|value| value.get("audio"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        embedded_context: capabilities
+            .and_then(|value| value.get("embeddedContext"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    }
+}
+
+fn percent_encode_uri_component(value: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(HEX[(byte >> 4) as usize]));
+            encoded.push(char::from(HEX[(byte & 0x0f) as usize]));
+        }
+    }
+    encoded
+}
+
+fn validate_attachment_name(name: &str) -> Result<(), String> {
+    if name.is_empty() || name.len() > 255 {
+        return Err("Attachment names must contain between 1 and 255 bytes.".to_string());
+    }
+    if name.contains(['/', '\\']) || name.chars().any(char::is_control) {
+        return Err(format!("Attachment `{name}` has an invalid file name."));
+    }
+    Ok(())
+}
+
+fn validate_mime_type(name: &str, mime_type: &str) -> Result<(), String> {
+    if mime_type.is_empty()
+        || mime_type.len() > 160
+        || mime_type.chars().any(char::is_control)
+        || !mime_type.contains('/')
+    {
+        return Err(format!("Attachment `{name}` has an invalid MIME type."));
+    }
+    Ok(())
+}
+
+fn prompt_content(
+    text: String,
+    attachments: Vec<PromptAttachment>,
+    capabilities: &PromptCapabilities,
+) -> Result<Vec<Value>, String> {
+    if attachments.len() > MAX_ATTACHMENTS {
+        return Err(format!(
+            "A prompt can contain up to {MAX_ATTACHMENTS} attachments."
+        ));
+    }
+
+    let mut content = Vec::with_capacity(attachments.len() + 1);
+    if !text.trim().is_empty() {
+        content.push(json!({ "type": "text", "text": text }));
+    }
+
+    let mut declared_total = 0_u64;
+    let mut content_total = 0_u64;
+    for (index, attachment) in attachments.into_iter().enumerate() {
+        let PromptAttachment {
+            name,
+            mime_type,
+            size,
+            kind,
+            data,
+        } = attachment;
+        let name = name.trim().to_string();
+        let mime_type = mime_type.trim().to_ascii_lowercase();
+        validate_attachment_name(&name)?;
+        validate_mime_type(&name, &mime_type)?;
+
+        if size > MAX_ATTACHMENT_BYTES {
+            return Err(format!(
+                "Attachment `{name}` exceeds the 8 MiB per-file limit."
+            ));
+        }
+        declared_total = declared_total
+            .checked_add(size)
+            .ok_or_else(|| "Attachment sizes overflowed the supported range.".to_string())?;
+        if declared_total > MAX_TOTAL_ATTACHMENT_BYTES {
+            return Err("Attachments exceed the 24 MiB total limit.".to_string());
+        }
+
+        let uri = format!(
+            "grokdesk://attachment/{index}/{}",
+            percent_encode_uri_component(&name)
+        );
+        let actual_size = match kind {
+            PromptAttachmentKind::Image => {
+                if !capabilities.image {
+                    return Err(format!(
+                        "The connected Grok Runtime does not advertise image prompt support; `{name}` was not sent."
+                    ));
+                }
+                if !mime_type.starts_with("image/") {
+                    return Err(format!("Attachment `{name}` is not a valid image payload."));
+                }
+                let decoded = BASE64_STANDARD
+                    .decode(data.as_bytes())
+                    .map_err(|_| format!("Attachment `{name}` contains invalid base64 data."))?;
+                if decoded.len() as u64 != size {
+                    return Err(format!(
+                        "Attachment `{name}` changed while it was being prepared."
+                    ));
+                }
+                content.push(json!({
+                    "type": "image",
+                    "mimeType": mime_type,
+                    "data": data
+                }));
+                decoded.len() as u64
+            }
+            PromptAttachmentKind::Text => {
+                if !capabilities.embedded_context {
+                    return Err(format!(
+                        "The connected Grok Runtime does not advertise embedded file support; `{name}` was not sent."
+                    ));
+                }
+                let actual_size = data.len() as u64;
+                if actual_size > MAX_ATTACHMENT_BYTES {
+                    return Err(format!(
+                        "Attachment `{name}` exceeds the 8 MiB decoded-text limit."
+                    ));
+                }
+                content.push(json!({
+                    "type": "resource",
+                    "resource": {
+                        "uri": uri,
+                        "mimeType": mime_type,
+                        "text": data
+                    }
+                }));
+                actual_size
+            }
+            PromptAttachmentKind::Binary => {
+                if !capabilities.embedded_context {
+                    return Err(format!(
+                        "The connected Grok Runtime does not advertise embedded file support; `{name}` was not sent."
+                    ));
+                }
+                let decoded = BASE64_STANDARD
+                    .decode(data.as_bytes())
+                    .map_err(|_| format!("Attachment `{name}` contains invalid base64 data."))?;
+                if decoded.len() as u64 != size {
+                    return Err(format!(
+                        "Attachment `{name}` changed while it was being prepared."
+                    ));
+                }
+                content.push(json!({
+                    "type": "resource",
+                    "resource": {
+                        "uri": uri,
+                        "mimeType": mime_type,
+                        "blob": data
+                    }
+                }));
+                decoded.len() as u64
+            }
+        };
+
+        content_total = content_total
+            .checked_add(actual_size)
+            .ok_or_else(|| "Attachment contents overflowed the supported range.".to_string())?;
+        if content_total > MAX_TOTAL_ATTACHMENT_BYTES {
+            return Err("Decoded attachments exceed the 24 MiB total limit.".to_string());
+        }
+    }
+
+    if content.is_empty() {
+        return Err("Enter a message or attach at least one file.".to_string());
+    }
+    Ok(content)
 }
 
 impl GrokBridge {
@@ -421,6 +651,7 @@ impl GrokBridge {
     async fn stop(&self) -> Result<(), String> {
         self.stdin.lock().await.take();
         self.session_id.lock().await.take();
+        *self.prompt_capabilities.lock().await = PromptCapabilities::default();
 
         if let Some(mut child) = self.child.lock().await.take() {
             child
@@ -527,11 +758,14 @@ pub async fn start_acp_session(
     resume_session_id: Option<String>,
     app: AppHandle,
     bridge: State<'_, GrokBridge>,
-) -> Result<String, String> {
+) -> Result<AcpSessionInfo, String> {
     let resume_session_id = resume_session_id.filter(|session_id| !session_id.trim().is_empty());
     if let Some(session_id) = bridge.session_id.lock().await.clone() {
         if resume_session_id.as_deref() == Some(session_id.as_str()) {
-            return Ok(session_id);
+            return Ok(AcpSessionInfo {
+                session_id,
+                prompt_capabilities: bridge.prompt_capabilities.lock().await.clone(),
+            });
         }
     }
 
@@ -598,10 +832,15 @@ pub async fn start_acp_session(
         )
         .await;
 
-    if let Err(error) = initialize {
-        let _ = bridge.stop().await;
-        return Err(error);
-    }
+    let initialize = match initialize {
+        Ok(initialize) => initialize,
+        Err(error) => {
+            let _ = bridge.stop().await;
+            return Err(error);
+        }
+    };
+    let prompt_capabilities = prompt_capabilities_from_initialize(&initialize);
+    *bridge.prompt_capabilities.lock().await = prompt_capabilities.clone();
 
     let (session_method, session_params) =
         session_start_request(&workspace, resume_session_id.as_deref());
@@ -629,12 +868,16 @@ pub async fn start_acp_session(
 
     *bridge.session_id.lock().await = Some(session_id.clone());
     let _ = app.emit("grok://status", "Grok Build · ACP connected");
-    Ok(session_id)
+    Ok(AcpSessionInfo {
+        session_id,
+        prompt_capabilities,
+    })
 }
 
 #[tauri::command]
 pub async fn send_acp_prompt(
     text: String,
+    attachments: Vec<PromptAttachment>,
     app: AppHandle,
     bridge: State<'_, GrokBridge>,
 ) -> Result<(), String> {
@@ -644,13 +887,15 @@ pub async fn send_acp_prompt(
         .await
         .clone()
         .ok_or_else(|| "Start an ACP session before sending a prompt.".to_string())?;
+    let capabilities = bridge.prompt_capabilities.lock().await.clone();
+    let prompt = prompt_content(text, attachments, &capabilities)?;
 
     let response = bridge
         .request(
             "session/prompt",
             json!({
                 "sessionId": session_id,
-                "prompt": [{ "type": "text", "text": text }]
+                "prompt": prompt
             }),
             Duration::from_secs(6 * 60 * 60),
         )
@@ -943,6 +1188,79 @@ mod tests {
         );
         assert_eq!(subscription.availability, "available");
         assert!(subscription.message.is_none());
+    }
+
+    #[test]
+    fn reads_prompt_capabilities_from_initialize_result() {
+        let capabilities = prompt_capabilities_from_initialize(&json!({
+            "agentCapabilities": {
+                "promptCapabilities": {
+                    "image": true,
+                    "audio": false,
+                    "embeddedContext": true
+                }
+            }
+        }));
+
+        assert!(capabilities.image);
+        assert!(!capabilities.audio);
+        assert!(capabilities.embedded_context);
+    }
+
+    #[test]
+    fn builds_real_acp_content_for_text_images_and_embedded_files() {
+        let capabilities = PromptCapabilities {
+            image: true,
+            audio: false,
+            embedded_context: true,
+        };
+        let content = prompt_content(
+            "Review these files".to_string(),
+            vec![
+                PromptAttachment {
+                    name: "screen.png".to_string(),
+                    mime_type: "image/png".to_string(),
+                    size: 3,
+                    kind: PromptAttachmentKind::Image,
+                    data: BASE64_STANDARD.encode([1_u8, 2, 3]),
+                },
+                PromptAttachment {
+                    name: "notes.md".to_string(),
+                    mime_type: "text/markdown".to_string(),
+                    size: 5,
+                    kind: PromptAttachmentKind::Text,
+                    data: "hello".to_string(),
+                },
+            ],
+            &capabilities,
+        )
+        .expect("supported attachments should become ACP content blocks");
+
+        assert_eq!(content[0]["type"], "text");
+        assert_eq!(content[1]["type"], "image");
+        assert_eq!(content[2]["type"], "resource");
+        assert_eq!(content[2]["resource"]["text"], "hello");
+        assert!(content[2]["resource"]["uri"]
+            .as_str()
+            .is_some_and(|uri| uri.ends_with("notes.md")));
+    }
+
+    #[test]
+    fn rejects_attachments_when_the_runtime_does_not_advertise_support() {
+        let error = prompt_content(
+            String::new(),
+            vec![PromptAttachment {
+                name: "screen.png".to_string(),
+                mime_type: "image/png".to_string(),
+                size: 3,
+                kind: PromptAttachmentKind::Image,
+                data: BASE64_STANDARD.encode([1_u8, 2, 3]),
+            }],
+            &PromptCapabilities::default(),
+        )
+        .expect_err("unsupported image prompts must fail explicitly");
+
+        assert!(error.contains("does not advertise image prompt support"));
     }
 
     #[test]

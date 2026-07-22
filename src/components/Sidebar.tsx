@@ -31,6 +31,7 @@ interface SidebarProps {
   onNavigate: (key: NavigationKey) => void;
   workspaceLabel: string;
   onChooseWorkspace: () => void;
+  workspaceSwitchDisabled: boolean;
   runtime: RuntimeStatus | null;
   statusText: string;
   onStatusClick: () => void;
@@ -48,6 +49,7 @@ export function Sidebar({
   onNavigate,
   workspaceLabel,
   onChooseWorkspace,
+  workspaceSwitchDisabled,
   runtime,
   statusText,
   onStatusClick,
@@ -95,6 +97,7 @@ export function Sidebar({
           type="button"
           className="workspace-switcher"
           onClick={onChooseWorkspace}
+          disabled={workspaceSwitchDisabled}
           title="Choose a workspace"
         >
           <span className="workspace-switcher__icon">

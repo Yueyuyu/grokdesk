@@ -23,7 +23,10 @@ import type {
   GrokTask,
   PermissionOption,
   PermissionRequest,
+  PromptAttachment,
+  PromptCapabilities,
   RuntimeStatus,
+  ToolActivity,
 } from "../types";
 
 interface ClientRequestPayload {
@@ -71,6 +74,8 @@ export function useGrokRuntime(
 ) {
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [promptCapabilities, setPromptCapabilities] =
+    useState<PromptCapabilities | null>(null);
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const [permission, setPermission] = useState<PermissionRequest | null>(null);
   const [busy, setBusy] = useState(false);
@@ -302,14 +307,17 @@ export function useGrokRuntime(
             sessionTaskIdRef.current = null;
             await stopAcpSession();
             setConnectedSession(null, null);
+            setPromptCapabilities(null);
           }
 
           sessionTaskIdRef.current = task.id;
           ignoreSessionUpdatesRef.current = Boolean(resumeSessionId);
-          const nextSessionId = await startAcpSession(
+          const session = await startAcpSession(
             taskWorkspace,
             resumeSessionId,
           );
+          const nextSessionId = session.sessionId;
+          setPromptCapabilities(session.promptCapabilities);
           setConnectedSession(nextSessionId, task.id);
           updateTask(task.id, (current) =>
             current.acpSessionId === nextSessionId
@@ -327,6 +335,7 @@ export function useGrokRuntime(
           return nextSessionId;
         } catch (cause) {
           setConnectedSession(null, null);
+          setPromptCapabilities(null);
           if (isAuthenticationError(cause)) {
             setRuntime((current) =>
               current ? { ...current, authenticationState: "expired" } : current,
@@ -383,15 +392,40 @@ export function useGrokRuntime(
   }, [activeTask?.id]);
 
   const runBrowserDemo = useCallback(
-    async (taskId: string, prompt: string) => {
+    async (taskId: string, prompt: string, attachmentCount: number) => {
       const response = [
-        "Browser preview simulation: your task and message were saved locally. ",
-        "In the installed desktop app, this prompt is sent to the official Grok Build ACP session. ",
-        `Current preview request: “${prompt.slice(0, 80)}${prompt.length > 80 ? "…" : ""}”`,
+        "### Browser preview\n\n",
+        "Your task and message were saved **locally in this preview**.\n\n",
+        attachmentCount > 0
+          ? `- **Attachments:** ${attachmentCount} selected for interface testing; no file content was sent or uploaded.\n`
+          : "",
+        "- **Desktop behavior:** the installed app sends the prompt through the official `Grok Build ACP` session.\n\n",
+        "| Preview check | Result |\n| --- | --- |\n| Local task | Saved |\n| External upload | Not performed |\n\n",
+        "```text\nNo command was executed in browser preview.\n```\n\n",
+        prompt
+          ? `> Current preview request: “${prompt.slice(0, 80)}${prompt.length > 80 ? "…" : ""}”`
+          : "> Current preview request contains attachments only.",
       ];
+      const previewTools = [
+        ["Read", "Preview only · no workspace files read"],
+        ["Update", "Preview only · no files changed"],
+        ["Run", "Preview only · no command executed"],
+        ["Test", "Preview only · no test process started"],
+        ["Read", "Preview only · no Git state inspected"],
+        ["Update", "Preview only · interface demonstration"],
+      ].map(
+        ([action, target], index): ToolActivity => ({
+          id: `preview-tool-${index}`,
+          action,
+          target,
+          progress: 100,
+          status: "complete",
+        }),
+      );
 
       updateTask(taskId, (task) => ({
         ...task,
+        tools: previewTools,
         messages: [
           ...task.messages,
           {
@@ -423,10 +457,15 @@ export function useGrokRuntime(
   );
 
   const send = useCallback(
-    async (rawText: string) => {
+    async (rawText: string, attachments: PromptAttachment[] = []) => {
       const text = rawText.trim();
       const task = activeTaskRef.current;
-      if (!text || busy || !task) return;
+      if ((!text && attachments.length === 0) || busy || !task) return;
+
+      const attachmentSummaries = attachments.map(({ data: _data, ...summary }) =>
+        summary,
+      );
+      const titleSource = text || `Review ${attachmentSummaries[0]?.name ?? "attachments"}`;
 
       const taskId = task.id;
       turnCancelledRef.current = false;
@@ -438,7 +477,7 @@ export function useGrokRuntime(
           ...current,
           title:
             firstMessage && current.title === NEW_TASK_TITLE
-              ? deriveTaskTitle(text)
+              ? deriveTaskTitle(titleSource)
               : current.title,
           updatedAt: new Date().toISOString(),
           status: "running",
@@ -453,6 +492,7 @@ export function useGrokRuntime(
               name: "You",
               time: formatTime(),
               content: text,
+              attachments: attachmentSummaries,
             },
           ],
         };
@@ -462,9 +502,9 @@ export function useGrokRuntime(
       try {
         await connectTask(task);
         if (isDesktopRuntime()) {
-          await sendAcpPrompt(text);
+          await sendAcpPrompt(text, attachments);
         } else {
-          await runBrowserDemo(taskId, text);
+          await runBrowserDemo(taskId, text, attachments.length);
         }
         succeeded = true;
       } catch (cause) {
@@ -475,6 +515,7 @@ export function useGrokRuntime(
         if (isDesktopRuntime()) {
           await stopAcpSession().catch(() => undefined);
           setConnectedSession(null, null);
+          setPromptCapabilities(null);
           setStatusText("Grok Build · Ready to retry");
         }
       } finally {
@@ -496,15 +537,21 @@ export function useGrokRuntime(
 
   const retry = useCallback(async () => {
     const task = activeTaskRef.current;
-    const previousPrompt = task?.messages
+    const previousMessage = task?.messages
       .slice()
       .reverse()
-      .find((entry) => entry.role === "user")?.content;
-    if (!previousPrompt) {
+      .find((entry) => entry.role === "user");
+    if (!previousMessage) {
       setError("There is no previous prompt to retry.");
       return;
     }
-    await send(previousPrompt);
+    if (previousMessage.attachments && previousMessage.attachments.length > 0) {
+      setError(
+        "Attachment contents are not saved in task history. Add the files again before retrying this prompt.",
+      );
+      return;
+    }
+    await send(previousMessage.content);
   }, [send]);
 
   const cancel = useCallback(async () => {
@@ -705,6 +752,7 @@ export function useGrokRuntime(
     const stop = async () => {
       await stopAcpSession();
       setConnectedSession(null, null);
+      setPromptCapabilities(null);
       setStatusText("Grok Build · OAuth verified");
     };
     const operation = connectionQueueRef.current.then(stop, stop);
@@ -718,6 +766,7 @@ export function useGrokRuntime(
   return {
     runtime,
     sessionId,
+    promptCapabilities,
     messages: activeTask?.messages ?? [],
     plan: activeTask?.plan ?? [],
     tools: activeTask?.tools ?? [],
