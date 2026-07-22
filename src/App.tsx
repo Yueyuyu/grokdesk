@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { CommandPalette } from "./components/CommandPalette";
+import { DiagnosticCenter } from "./components/DiagnosticCenter";
 import { FeaturePanel } from "./components/FeaturePanel";
 import { Inspector } from "./components/Inspector";
 import { McpPanel } from "./components/McpPanel";
@@ -288,6 +289,17 @@ export function App() {
             clearDisabled={Boolean(grok.permission) || grok.busy || terminal.running}
             onClear={auditStore.clear}
             onChooseWorkspace={() => void pickWorkspace()}
+          />
+        ) : activeNavigation === "diagnostics" ? (
+          <DiagnosticCenter
+            workspacePath={workspacePath}
+            connected={Boolean(grok.sessionId)}
+            preview={preview}
+            onInstall={grok.installRuntime}
+            onSignIn={grok.signIn}
+            onConnect={grok.connect}
+            onChooseWorkspace={pickWorkspace}
+            onOpenMcp={() => setActiveNavigation("mcp")}
           />
         ) : activeNavigation === "plugins" ? (
           <PluginPanel

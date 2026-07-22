@@ -28,10 +28,10 @@ pub struct WorkspaceChange {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSnapshot {
-    mode: String,
+    pub(crate) mode: String,
     repository_root: Option<String>,
     branch: Option<String>,
-    changes: Vec<WorkspaceChange>,
+    pub(crate) changes: Vec<WorkspaceChange>,
     message: Option<String>,
 }
 
@@ -552,7 +552,12 @@ pub fn discard_workspace_change(cwd: String, path: String) -> Result<WorkspaceSn
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{
+        sync::atomic::{AtomicU64, Ordering},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    static NEXT_TEST_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
     struct TestDirectory(PathBuf);
 
@@ -562,11 +567,12 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .expect("clock should be after the epoch")
                 .as_nanos();
+            let sequence = NEXT_TEST_DIRECTORY.fetch_add(1, Ordering::Relaxed);
             let path = std::env::temp_dir().join(format!(
-                "grokdesk-workspace-{}-{suffix}",
+                "grokdesk-workspace-{}-{suffix}-{sequence}",
                 std::process::id()
             ));
-            fs::create_dir_all(&path).expect("test directory should be created");
+            fs::create_dir(&path).expect("test directory should be unique and created");
             Self(path)
         }
     }

@@ -40,8 +40,8 @@ pub struct GrokMcpServerSummary {
     transport: String,
     scope: Option<String>,
     endpoint: Option<String>,
-    enabled: bool,
-    status: Option<String>,
+    pub(crate) enabled: bool,
+    pub(crate) status: Option<String>,
     source: Option<String>,
     tool_count: usize,
 }
@@ -49,7 +49,7 @@ pub struct GrokMcpServerSummary {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GrokMcpCatalog {
-    servers: Vec<GrokMcpServerSummary>,
+    pub(crate) servers: Vec<GrokMcpServerSummary>,
     message: Option<String>,
 }
 

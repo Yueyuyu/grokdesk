@@ -13,6 +13,9 @@
 - Search tasks or run a command
 - Permissions
 - Permissions & activity
+- Diagnostics
+- Export report
+- Run diagnostics
 - All activity
 - Grok tools
 - Commands
@@ -68,10 +71,11 @@
 ## Core interaction inventory
 
 - Workspace selector and native folder picker.
-- Tasks, Plugins, MCP, and Settings navigation.
+- Tasks, Permissions, Diagnostics, Plugins, MCP, and Settings navigation.
 - Task rename/delete, archive/restore, local branching with a fresh ACP session, and validated JSON import/export.
 - `Ctrl+K` command palette for local cross-task search, navigation, task creation, workspace selection, and inspector commands.
 - Local permission and execution audit for redacted permission decisions, Grok tool lifecycles, and workspace-command outcomes, with filtering, search, retention disclosure, and confirmed clearing.
+- Native diagnostics for GrokDesk, Runtime, OAuth, ACP, workspace/Git, and Runtime-reported MCP state, with direct recovery actions and a sanitized Markdown support report. Browser previews never invent checks.
 - Resizable left and right panes plus inspector collapse.
 - Changes, Terminal, Tests, and Context tabs.
 - Up to eight independent workspace-terminal tabs with per-tab draft, history, output, background state, rename/close controls, and process-tree cancellation.

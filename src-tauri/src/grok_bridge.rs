@@ -74,10 +74,10 @@ pub struct PromptAttachment {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeStatus {
-    available: bool,
-    authentication_state: String,
+    pub(crate) available: bool,
+    pub(crate) authentication_state: String,
     executable_path: Option<String>,
-    version: Option<String>,
+    pub(crate) version: Option<String>,
     auth_file_path: Option<String>,
 }
 
@@ -355,7 +355,7 @@ pub(crate) fn canonical_workspace(cwd: &str) -> Result<PathBuf, String> {
         .map_err(|error| format!("Workspace `{cwd}` is not accessible: {error}"))
 }
 
-fn detect_runtime() -> RuntimeStatus {
+pub(crate) fn detect_runtime() -> RuntimeStatus {
     let executable = grok_executable().ok();
     let version = executable.as_ref().and_then(|path| {
         let mut command = std::process::Command::new(path);

@@ -5,6 +5,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   AcpSessionInfo,
   AddMcpServerInput,
+  DiagnosticReport,
   GrokMcpCatalog,
   GrokPluginCatalog,
   GrokSubscription,
@@ -64,6 +65,38 @@ export async function probeRuntime(): Promise<RuntimeStatus> {
   }
 
   return invoke<RuntimeStatus>("probe_runtime");
+}
+
+export async function runDiagnostics(
+  cwd: string,
+  acpConnected: boolean,
+): Promise<DiagnosticReport> {
+  if (!isDesktopRuntime()) {
+    desktopOnlyRuntimeFeature("Diagnostics");
+  }
+  return invoke<DiagnosticReport>("run_diagnostics", {
+    cwd: runtimeWorkspace(cwd),
+    acpConnected,
+  });
+}
+
+export async function writeDiagnosticReportFile(
+  content: string,
+): Promise<boolean> {
+  if (!isDesktopRuntime()) {
+    desktopOnlyRuntimeFeature("Diagnostic report export");
+  }
+  const timestamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 13);
+  const selected = await save({
+    defaultPath: `GrokDesk-diagnostics-${timestamp}.md`,
+    filters: [{ name: "Sanitized diagnostics report", extensions: ["md"] }],
+  });
+  if (typeof selected !== "string") return false;
+  const path = selected.toLocaleLowerCase().endsWith(".md")
+    ? selected
+    : `${selected}.md`;
+  await invoke("write_diagnostic_report", { path, content });
+  return true;
 }
 
 export async function startAcpSession(

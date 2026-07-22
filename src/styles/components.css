@@ -712,6 +712,39 @@
 .audit-status--cancelled, .audit-status--stopped, .audit-status--interrupted { border-color: color-mix(in srgb, var(--amber) 28%, var(--border)); background: var(--amber-soft); color: var(--amber); }
 .audit-empty-state { border-bottom: 1px solid var(--border); }
 
+.diagnostic-center { max-width: none; }
+.diagnostic-center__header { min-height: 82px; }
+.diagnostic-header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+.diagnostic-header-actions button { display: inline-flex; min-height: 32px; align-items: center; gap: 6px; }
+.diagnostic-preview-note,
+.diagnostic-summary,
+.diagnostic-privacy-note,
+.diagnostic-list { max-width: 900px; }
+.diagnostic-summary .has-attention strong { color: var(--amber); }
+.diagnostic-summary .has-blocked strong { color: var(--red); }
+.diagnostic-overall--healthy strong { color: var(--green); }
+.diagnostic-overall--attention strong { color: var(--amber); }
+.diagnostic-overall--blocked strong { color: var(--red); }
+.diagnostic-overall--info strong { color: var(--blue); }
+.diagnostic-list { margin-top: 18px; padding-bottom: 28px; border-top: 1px solid var(--border); }
+.diagnostic-check { display: grid; min-height: 104px; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 16px 2px; border-bottom: 1px solid var(--border); }
+.diagnostic-check__icon { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-subtle); color: var(--text-secondary); }
+.diagnostic-check--healthy .diagnostic-check__icon { border-color: color-mix(in srgb, var(--green) 28%, var(--border)); background: var(--green-soft); color: var(--green); }
+.diagnostic-check--attention .diagnostic-check__icon { border-color: color-mix(in srgb, var(--amber) 28%, var(--border)); background: var(--amber-soft); color: var(--amber); }
+.diagnostic-check--blocked .diagnostic-check__icon { border-color: color-mix(in srgb, var(--red) 28%, var(--border)); background: var(--red-soft); color: var(--red); }
+.diagnostic-check--info .diagnostic-check__icon { border-color: color-mix(in srgb, var(--blue) 26%, var(--border)); background: var(--blue-soft); color: var(--blue); }
+.diagnostic-check__body { min-width: 0; }
+.diagnostic-check__heading { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.diagnostic-check__heading strong { min-width: 0; overflow: hidden; font-size: 11.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.diagnostic-check__body p { margin: 6px 0 4px; color: var(--text-primary); font-size: 10.5px; line-height: 1.5; }
+.diagnostic-check__body small { display: block; max-width: 680px; color: var(--text-secondary); font-size: 9.5px; line-height: 1.55; }
+.diagnostic-status { display: inline-flex; min-height: 20px; flex: 0 0 auto; align-items: center; padding: 0 7px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-subtle); color: var(--text-secondary); font-size: 8.5px; font-weight: 500; }
+.diagnostic-status--healthy { border-color: color-mix(in srgb, var(--green) 30%, var(--border)); background: var(--green-soft); color: var(--green); }
+.diagnostic-status--attention { border-color: color-mix(in srgb, var(--amber) 28%, var(--border)); background: var(--amber-soft); color: var(--amber); }
+.diagnostic-status--blocked { border-color: color-mix(in srgb, var(--red) 30%, var(--border)); background: var(--red-soft); color: var(--red); }
+.diagnostic-status--info { border-color: color-mix(in srgb, var(--blue) 28%, var(--border)); background: var(--blue-soft); color: var(--blue); }
+.diagnostic-check__action { display: inline-flex; min-height: 30px; align-items: center; gap: 6px; padding-inline: 9px; font-size: 10px; }
+
 .account-summary { max-width: 720px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-elevated); }
 .account-summary__heading { display: flex; align-items: center; gap: 11px; padding: 13px 14px; border-bottom: 1px solid var(--border); }
 .account-summary__heading > span:last-child { display: grid; min-width: 0; gap: 3px; }

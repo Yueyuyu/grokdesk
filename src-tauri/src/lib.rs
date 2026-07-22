@@ -1,3 +1,4 @@
+mod diagnostics;
 mod grok_bridge;
 mod runtime_extensions;
 mod task_exchange;
@@ -6,6 +7,7 @@ mod workspace_terminal;
 
 use tauri::Manager;
 
+use diagnostics::{run_diagnostics, write_diagnostic_report};
 use grok_bridge::{
     cancel_acp_turn, fetch_grok_subscription, install_grok_cli, open_grok_subscription,
     probe_runtime, respond_to_client_request, send_acp_prompt, start_acp_session,
@@ -37,6 +39,8 @@ pub fn run() {
         .manage(GrokBridge::default())
         .manage(WorkspaceTerminal::default())
         .invoke_handler(tauri::generate_handler![
+            run_diagnostics,
+            write_diagnostic_report,
             probe_runtime,
             start_acp_session,
             send_acp_prompt,

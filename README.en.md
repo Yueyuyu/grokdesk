@@ -68,6 +68,7 @@ The agent itself remains the official Grok Build CLI. GrokDesk focuses on the de
 | Task lifecycle | Archives and restores tasks, creates local branches with a fresh ACP session, and explicitly imports/exports strictly validated JSON up to 8 MiB without credentials or attachment bodies |
 | Command palette and cross-task search | Press `Ctrl+K` to search active and archived tasks in the current workspace across titles, conversations, attachment names, plans, and tools, or run navigation, task, workspace, and inspector commands |
 | Permissions and execution audit | Records redacted permission decisions, Grok tool lifecycles, and terminal command outcomes per workspace, with filters, search, and confirmed clearing; browser previews never generate simulated audit records |
+| Diagnostics and support reports | Runs real checks for GrokDesk, Runtime, OAuth, ACP, workspace/Git, and MCP, with actionable recovery links and a sanitized Markdown export; browser previews never invent health data |
 | Desktop shell | Single instance, resizable panes, collapsible inspector, Light/Dark/System themes, and a Windows desktop shortcut |
 
 ### Attachment boundaries
@@ -153,6 +154,7 @@ Bundles are written to `src-tauri/target/release/bundle/`.
 - Task JSON is imported or exported only after an explicit user action. It may contain conversations, file names, and workspace paths, but never OAuth/MCP credentials, ACP session IDs, or attachment bodies.
 - The command palette searches only local tasks in the current workspace; queries and results are never uploaded to an external service.
 - Permission and execution history stays local and workspace-scoped, with a 30-day and 500-record limit. Terminal output, prompts, responses, attachment bodies, OAuth tokens, and MCP headers are excluded, while sensitive command arguments are redacted before persistence.
+- Diagnostic reports contain only versions, platform details, aggregate counts, and controlled status text. Absolute paths, account identifiers, prompts, responses, terminal output, attachments, OAuth credentials, and MCP names, endpoints, or headers are excluded or redacted.
 - File revert always requires confirmation; there is no automatic bulk rollback.
 - Raw HTML is disabled in Markdown, and external links use isolated new-window behavior.
 

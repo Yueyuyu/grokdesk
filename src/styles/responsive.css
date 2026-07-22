@@ -404,6 +404,21 @@
     padding-right: 48px;
   }
 
+  .diagnostic-center__header {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    padding-right: 48px;
+  }
+
+  .diagnostic-header-actions {
+    grid-column: 2;
+    flex-wrap: wrap;
+  }
+
+  .diagnostic-header-actions .primary-button {
+    margin-left: 0;
+  }
+
   .permission-center__header .version-chip {
     grid-column: 2;
     justify-self: start;
@@ -453,6 +468,30 @@
 
   .audit-event__body footer {
     flex-wrap: wrap;
+  }
+
+  .diagnostic-check {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .diagnostic-check__icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .diagnostic-check__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .diagnostic-check__body p {
+    margin-top: 7px;
+  }
+
+  .diagnostic-check__action {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .extension-panel__header {

@@ -3,6 +3,7 @@ export type ThemePreference = "light" | "dark" | "system";
 export type NavigationKey =
   | "tasks"
   | "permissions"
+  | "diagnostics"
   | "plugins"
   | "mcp"
   | "settings";
@@ -83,6 +84,38 @@ export interface AddMcpServerInput {
 
 export interface RuntimeCommandResult {
   message: string;
+}
+
+export type DiagnosticStatus = "healthy" | "attention" | "blocked" | "info";
+
+export type DiagnosticActionKind =
+  | "install_runtime"
+  | "sign_in"
+  | "choose_workspace"
+  | "connect_acp"
+  | "open_mcp";
+
+export interface DiagnosticAction {
+  kind: DiagnosticActionKind;
+  label: string;
+}
+
+export interface DiagnosticCheck {
+  id: string;
+  category: "app" | "runtime" | "account" | "acp" | "workspace" | "mcp";
+  title: string;
+  status: DiagnosticStatus;
+  summary: string;
+  detail: string;
+  action: DiagnosticAction | null;
+}
+
+export interface DiagnosticReport {
+  appVersion: string;
+  platform: string;
+  runtimeVersion: string | null;
+  workspaceSelected: boolean;
+  checks: DiagnosticCheck[];
 }
 
 export interface WorkspaceCommandOutput {

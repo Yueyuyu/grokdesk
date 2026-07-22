@@ -7,6 +7,7 @@ import {
   ListMagnifyingGlass,
   MagnifyingGlass,
   Plus,
+  Pulse,
   PuzzlePiece,
   ShareNetwork,
   ShieldCheck,
@@ -126,6 +127,15 @@ export function CommandPalette({
         icon: <ShieldCheck size={17} />,
         featured: true,
         run: () => onNavigate("permissions"),
+      },
+      {
+        id: "navigate-diagnostics",
+        label: "Open Diagnostics",
+        detail: "Check Runtime, OAuth, ACP, workspace, Git, and MCP",
+        keywords: "health doctor troubleshoot report support",
+        icon: <Pulse size={17} />,
+        featured: true,
+        run: () => onNavigate("diagnostics"),
       },
       {
         id: "navigate-plugins",

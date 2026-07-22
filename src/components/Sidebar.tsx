@@ -11,6 +11,7 @@ import {
   MagnifyingGlass,
   PencilSimple,
   Plus,
+  Pulse,
   PuzzlePiece,
   ShareNetwork,
   ShieldCheck,
@@ -28,6 +29,7 @@ import type { GrokTask, NavigationKey, RuntimeStatus } from "../types";
 const navItems = [
   { id: "tasks" as const, label: "Tasks", icon: FileText },
   { id: "permissions" as const, label: "Permissions", icon: ShieldCheck },
+  { id: "diagnostics" as const, label: "Diagnostics", icon: Pulse },
   { id: "plugins" as const, label: "Plugins", icon: PuzzlePiece },
   { id: "mcp" as const, label: "MCP", icon: ShareNetwork },
   { id: "settings" as const, label: "Settings", icon: GearSix },
