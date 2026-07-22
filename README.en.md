@@ -66,6 +66,7 @@ The agent itself remains the official Grok Build CLI. GrokDesk focuses on the de
 | Local task history | Stores tasks, messages, plans, tools, and ACP session IDs per workspace; attachment contents are never stored |
 | Task lifecycle | Archives and restores tasks, creates local branches with a fresh ACP session, and explicitly imports/exports strictly validated JSON up to 8 MiB without credentials or attachment bodies |
 | Command palette and cross-task search | Press `Ctrl+K` to search active and archived tasks in the current workspace across titles, conversations, attachment names, plans, and tools, or run navigation, task, workspace, and inspector commands |
+| Permissions and execution audit | Records redacted permission decisions, Grok tool lifecycles, and terminal command outcomes per workspace, with filters, search, and confirmed clearing; browser previews never generate simulated audit records |
 | Desktop shell | Single instance, resizable panes, collapsible inspector, Light/Dark/System themes, and a Windows desktop shortcut |
 
 ### Attachment boundaries
@@ -150,6 +151,7 @@ Bundles are written to `src-tauri/target/release/bundle/`.
 - Attachment content is encoded only for the current turn and is not stored in task history.
 - Task JSON is imported or exported only after an explicit user action. It may contain conversations, file names, and workspace paths, but never OAuth/MCP credentials, ACP session IDs, or attachment bodies.
 - The command palette searches only local tasks in the current workspace; queries and results are never uploaded to an external service.
+- Permission and execution history stays local and workspace-scoped, with a 30-day and 500-record limit. Terminal output, prompts, responses, attachment bodies, OAuth tokens, and MCP headers are excluded, while sensitive command arguments are redacted before persistence.
 - File revert always requires confirmation; there is no automatic bulk rollback.
 - Raw HTML is disabled in Markdown, and external links use isolated new-window behavior.
 
@@ -159,7 +161,7 @@ Bundles are written to `src-tauri/target/release/bundle/`.
 - One-click Runtime installation is currently Windows-only.
 - Attachment support ultimately depends on the installed official Runtime's ACP capabilities.
 - Subscription and quota display depends on the official CLI's billing method.
-- Permission history, multi-terminal tabs, structured test results, and cross-device sync remain planned work.
+- Multi-terminal tabs, structured test results, and cross-device sync remain planned work.
 
 ## Contributing
 

@@ -27,6 +27,7 @@ import type { GrokTask, NavigationKey, RuntimeStatus } from "../types";
 
 const navItems = [
   { id: "tasks" as const, label: "Tasks", icon: FileText },
+  { id: "permissions" as const, label: "Permissions", icon: ShieldCheck },
   { id: "plugins" as const, label: "Plugins", icon: PuzzlePiece },
   { id: "mcp" as const, label: "MCP", icon: ShareNetwork },
   { id: "settings" as const, label: "Settings", icon: GearSix },
@@ -44,6 +45,7 @@ interface SidebarProps {
   tasks: GrokTask[];
   archivedTasks: GrokTask[];
   activeTaskId: string | null;
+  pendingPermissionCount: number;
   taskSwitchDisabled: boolean;
   onCreateTask: () => void;
   onSelectTask: (taskId: string) => void;
@@ -80,6 +82,7 @@ export function Sidebar({
   tasks,
   archivedTasks,
   activeTaskId,
+  pendingPermissionCount,
   taskSwitchDisabled,
   onCreateTask,
   onSelectTask,
@@ -158,6 +161,8 @@ export function Sidebar({
               <span>{label}</span>
               {id === "tasks" && tasks.length > 0 ? (
                 <span className="nav-row__count">{tasks.length}</span>
+              ) : id === "permissions" && pendingPermissionCount > 0 ? (
+                <span className="nav-row__count nav-row__count--attention">{pendingPermissionCount}</span>
               ) : null}
             </button>
           ))}

@@ -1,6 +1,11 @@
 export type ThemePreference = "light" | "dark" | "system";
 
-export type NavigationKey = "tasks" | "plugins" | "mcp" | "settings";
+export type NavigationKey =
+  | "tasks"
+  | "permissions"
+  | "plugins"
+  | "mcp"
+  | "settings";
 
 export type InspectorTab = "changes" | "terminal" | "context";
 
@@ -223,9 +228,37 @@ export interface PermissionOption {
 
 export interface PermissionRequest {
   id: number;
+  auditEventId: string;
   title: string;
   description: string;
   options: PermissionOption[];
+}
+
+export type AuditEventKind = "permission" | "tool" | "command";
+
+export type AuditEventStatus =
+  | "pending"
+  | "running"
+  | "allowed"
+  | "denied"
+  | "cancelled"
+  | "succeeded"
+  | "failed"
+  | "stopped"
+  | "interrupted";
+
+export interface AuditEvent {
+  id: string;
+  workspacePath: string;
+  taskId: string | null;
+  kind: AuditEventKind;
+  title: string;
+  detail: string;
+  status: AuditEventStatus;
+  createdAt: string;
+  updatedAt: string;
+  durationMs: number | null;
+  exitCode: number | null;
 }
 
 export interface AcpSessionUpdate {

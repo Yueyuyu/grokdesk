@@ -5,6 +5,7 @@ import {
   listenDesktopEvent,
   runWorkspaceCommand,
 } from "../lib/desktop";
+import type { RecordAuditEvent } from "../lib/audit";
 import type { WorkspaceCommandOutput } from "../types";
 
 const MAX_TERMINAL_LINES = 2_000;
@@ -46,7 +47,11 @@ const keepBoundedOutput = (lines: WorkspaceTerminalLine[]) => {
   return boundedByCount.slice(start);
 };
 
-export function useWorkspaceTerminal(workspacePath: string) {
+export function useWorkspaceTerminal(
+  workspacePath: string,
+  activeTaskId: string | null,
+  recordAuditEvent: RecordAuditEvent,
+) {
   const [lines, setLines] = useState<WorkspaceTerminalLine[]>([]);
   const [draft, setDraftState] = useState("");
   const [history, setHistory] = useState<string[]>([]);
@@ -120,6 +125,8 @@ export function useWorkspaceTerminal(workspacePath: string) {
       }
 
       const id = createCommandId();
+      const auditEventId = `command:${id}`;
+      const startedAt = Date.now();
       runningCommandId.current = id;
       setRunningCommand({ id, command });
       setStopping(false);
@@ -129,6 +136,15 @@ export function useWorkspaceTerminal(workspacePath: string) {
       setHistoryCursor(null);
       if (commandOverride === undefined) setDraftState("");
       append("command", `PS> ${command}`);
+      recordAuditEvent({
+        id: auditEventId,
+        workspacePath,
+        taskId: activeTaskId,
+        kind: "command",
+        title: command,
+        detail: "Workspace command started",
+        status: "running",
+      });
 
       try {
         const result = await runWorkspaceCommand(workspacePath, command, id);
@@ -139,15 +155,44 @@ export function useWorkspaceTerminal(workspacePath: string) {
             result.exitCode === null ? "without an exit code" : `with exit code ${result.exitCode}`;
           append("system", `Command finished ${exitLabel} in ${result.durationMs} ms.`);
         }
+        recordAuditEvent({
+          id: auditEventId,
+          workspacePath,
+          taskId: activeTaskId,
+          kind: "command",
+          title: command,
+          detail: result.cancelled
+            ? "Stopped by the user"
+            : result.exitCode === null
+              ? "Finished without an exit code"
+              : `Finished with exit code ${result.exitCode}`,
+          status: result.cancelled
+            ? "stopped"
+            : result.exitCode === null || result.exitCode === 0
+              ? "succeeded"
+              : "failed",
+          durationMs: result.durationMs,
+          exitCode: result.exitCode,
+        });
       } catch (cause) {
         append("stderr", String(cause).replace(/^Error:\s*/, ""));
+        recordAuditEvent({
+          id: auditEventId,
+          workspacePath,
+          taskId: activeTaskId,
+          kind: "command",
+          title: command,
+          detail: "Workspace command failed before returning a result",
+          status: "failed",
+          durationMs: Date.now() - startedAt,
+        });
       } finally {
         if (runningCommandId.current === id) runningCommandId.current = null;
         setRunningCommand((current) => (current?.id === id ? null : current));
         setStopping(false);
       }
     },
-    [append, draft, workspacePath],
+    [activeTaskId, append, draft, recordAuditEvent, workspacePath],
   );
 
   const cancel = useCallback(async () => {

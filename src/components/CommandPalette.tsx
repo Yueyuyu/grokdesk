@@ -8,6 +8,7 @@ import {
   Plus,
   PuzzlePiece,
   ShareNetwork,
+  ShieldCheck,
   SidebarSimple,
   TerminalWindow,
   X,
@@ -115,6 +116,15 @@ export function CommandPalette({
         keywords: "conversation history",
         icon: <FileText size={17} />,
         run: () => onNavigate("tasks"),
+      },
+      {
+        id: "navigate-permissions",
+        label: "Open Permissions & activity",
+        detail: "Review local decisions, tools, and command outcomes",
+        keywords: "audit security approval history execution",
+        icon: <ShieldCheck size={17} />,
+        featured: true,
+        run: () => onNavigate("permissions"),
       },
       {
         id: "navigate-plugins",
@@ -305,7 +315,7 @@ export function CommandPalette({
             <strong>{entry.command.label}</strong>
             <small>{entry.command.detail}</small>
           </span>
-          {entry.command.id === "navigate-tasks" && activeNavigation === "tasks" ? (
+          {entry.command.id === `navigate-${activeNavigation}` ? (
             <span className="command-palette__badge">Current</span>
           ) : null}
         </button>

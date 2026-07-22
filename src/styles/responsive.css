@@ -109,6 +109,20 @@
     padding: 0;
   }
 
+  .task-library-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .task-library-actions button {
+    gap: 0;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .task-library-actions button > span {
+    display: none;
+  }
+
   .sidebar__bottom {
     display: grid;
     justify-items: center;
@@ -382,6 +396,63 @@
 
   .feature-panel__header .primary-button {
     margin-left: 56px;
+  }
+
+  .permission-center__header {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    padding-right: 48px;
+  }
+
+  .permission-center__header .version-chip {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .audit-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .audit-summary > div {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .audit-summary > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .audit-summary > div:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+
+  .audit-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .audit-toolbar .extension-tabs {
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .audit-toolbar .extension-tabs button {
+    flex: 0 0 auto;
+  }
+
+  .audit-search {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .audit-clear-button {
+    justify-self: start;
+  }
+
+  .audit-event__body > p {
+    white-space: normal;
+  }
+
+  .audit-event__body footer {
+    flex-wrap: wrap;
   }
 
   .extension-panel__header {

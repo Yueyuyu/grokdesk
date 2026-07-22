@@ -11,6 +11,12 @@
 - GrokDesk
 - Search or run a command
 - Search tasks or run a command
+- Permissions
+- Permissions & activity
+- All activity
+- Grok tools
+- Commands
+- Clear history
 - Workspaces
 - acme/web-app
 - Tasks
@@ -64,6 +70,7 @@
 - Tasks, Plugins, MCP, and Settings navigation.
 - Task rename/delete, archive/restore, local branching with a fresh ACP session, and validated JSON import/export.
 - `Ctrl+K` command palette for local cross-task search, navigation, task creation, workspace selection, and inspector commands.
+- Local permission and execution audit for redacted permission decisions, Grok tool lifecycles, and workspace-command outcomes, with filtering, search, retention disclosure, and confirmed clearing.
 - Resizable left and right panes plus inspector collapse.
 - Changes, Terminal, and Context tabs.
 - Changed-file selection and copy-diff action.

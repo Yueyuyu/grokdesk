@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { normalizeSessionUpdate, planFromUpdate, toolFromUpdate } from "../lib/acp";
+import type { RecordAuditEvent } from "../lib/audit";
 import {
   answerClientRequest,
   cancelAcpTurn,
@@ -71,6 +72,7 @@ export function useGrokRuntime(
   workspacePath: string,
   activeTask: GrokTask | null,
   updateTask: UpdateTask,
+  recordAuditEvent: RecordAuditEvent,
 ) {
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -165,6 +167,26 @@ export function useGrokRuntime(
 
         const nextTool = toolFromUpdate(update);
         if (nextTool) {
+          const taskId = sessionTaskIdRef.current;
+          const taskWorkspace = activeTaskRef.current?.workspacePath ?? workspacePath;
+          if (taskId) {
+            recordAuditEvent({
+              id: `tool:${sessionIdRef.current ?? taskId}:${nextTool.id}`,
+              workspacePath: taskWorkspace,
+              taskId,
+              kind: "tool",
+              title: nextTool.target,
+              detail: nextTool.action,
+              status:
+                nextTool.status === "complete"
+                  ? "succeeded"
+                  : nextTool.status === "failed"
+                    ? "failed"
+                    : nextTool.status === "pending"
+                      ? "pending"
+                      : "running",
+            });
+          }
           updateConnectedTask((task) => {
             const index = task.tools.findIndex((item) => item.id === nextTool.id);
             const tools =
@@ -224,8 +246,11 @@ export function useGrokRuntime(
               }),
             );
 
-          setPermission({
+          const taskId = sessionTaskIdRef.current ?? activeTaskRef.current?.id ?? null;
+          const auditEventId = `permission:${sessionIdRef.current ?? taskId ?? "session"}:${payload.id}`;
+          const nextPermission: PermissionRequest = {
             id: payload.id,
+            auditEventId,
             title: String(
               payload.params?.title ?? "Grok Build needs permission",
             ),
@@ -249,6 +274,17 @@ export function useGrokRuntime(
                       kind: "reject_once",
                     },
                   ],
+          };
+          setPermission(nextPermission);
+          recordAuditEvent({
+            id: auditEventId,
+            workspacePath:
+              activeTaskRef.current?.workspacePath ?? workspacePath,
+            taskId,
+            kind: "permission",
+            title: nextPermission.title,
+            detail: "Waiting for your decision",
+            status: "pending",
           });
         },
       ),
@@ -276,7 +312,7 @@ export function useGrokRuntime(
       mounted.current = false;
       unlisteners.forEach((unlisten) => unlisten());
     };
-  }, [refreshRuntime, updateConnectedTask]);
+  }, [recordAuditEvent, refreshRuntime, updateConnectedTask, workspacePath]);
 
   const connectTask = useCallback(
     (task: GrokTask, restart = false): Promise<string> => {
@@ -742,10 +778,39 @@ export function useGrokRuntime(
       const result = option
         ? { outcome: { outcome: "selected", optionId: option.optionId } }
         : { outcome: { outcome: "cancelled" } };
-      await answerClientRequest(permission.id, result);
-      setPermission(null);
+      const rejected = Boolean(
+        option &&
+          (/reject|deny/i.test(option.kind ?? "") || /deny|reject/i.test(option.name)),
+      );
+      try {
+        await answerClientRequest(permission.id, result);
+        recordAuditEvent({
+          id: permission.auditEventId,
+          workspacePath:
+            activeTaskRef.current?.workspacePath ?? workspacePath,
+          taskId: activeTaskRef.current?.id ?? null,
+          kind: "permission",
+          title: permission.title,
+          detail: option?.name ?? "Dismissed without selecting an option",
+          status: option ? (rejected ? "denied" : "allowed") : "cancelled",
+        });
+        setPermission(null);
+      } catch (cause) {
+        recordAuditEvent({
+          id: permission.auditEventId,
+          workspacePath:
+            activeTaskRef.current?.workspacePath ?? workspacePath,
+          taskId: activeTaskRef.current?.id ?? null,
+          kind: "permission",
+          title: permission.title,
+          detail: "The decision could not be delivered to the Runtime",
+          status: "failed",
+        });
+        setError(String(cause));
+        throw cause;
+      }
     },
-    [permission],
+    [permission, recordAuditEvent, workspacePath],
   );
 
   const disconnect = useCallback(async () => {
