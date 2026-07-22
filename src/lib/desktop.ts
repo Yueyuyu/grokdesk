@@ -1,7 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   AcpSessionInfo,
   AddMcpServerInput,
@@ -21,6 +21,7 @@ import {
   getPreviewWorkspaceDiff,
   getPreviewWorkspaceSnapshot,
 } from "./workspace";
+import { MAX_TASK_EXCHANGE_BYTES } from "./taskExchange";
 
 const PREVIEW_RUNTIME_KEY = "grokdesk.preview.runtime-installed";
 const PREVIEW_AUTH_KEY = "grokdesk.preview.oauth-complete";
@@ -294,6 +295,79 @@ export async function chooseWorkspace(): Promise<string | null> {
   }
   const selected = await open({ directory: true, multiple: false });
   return typeof selected === "string" ? selected : null;
+}
+
+const browserTaskFile = () =>
+  new Promise<string | null>((resolve, reject) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.addEventListener(
+      "change",
+      () => {
+        const file = input.files?.[0];
+        if (!file) {
+          resolve(null);
+          return;
+        }
+        if (file.size > MAX_TASK_EXCHANGE_BYTES) {
+          reject(new Error("The selected task file exceeds the 8 MiB safety limit."));
+          return;
+        }
+        file.text().then(resolve, reject);
+      },
+      { once: true },
+    );
+    input.addEventListener("cancel", () => resolve(null), { once: true });
+    input.click();
+  });
+
+export async function readTaskExchangeFile(): Promise<string | null> {
+  if (!isDesktopRuntime()) return browserTaskFile();
+  const selected = await open({
+    directory: false,
+    multiple: false,
+    filters: [{ name: "GrokDesk task export", extensions: ["json"] }],
+  });
+  if (typeof selected !== "string") return null;
+  return invoke<string>("read_task_exchange_file", { path: selected });
+}
+
+const safeTaskFileName = (title: string) => {
+  const normalized = title
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+  return `${normalized || "grokdesk-task"}.grokdesk-task.json`;
+};
+
+export async function writeTaskExchangeFile(
+  title: string,
+  content: string,
+): Promise<boolean> {
+  const fileName = safeTaskFileName(title);
+  if (!isDesktopRuntime()) {
+    const url = URL.createObjectURL(
+      new Blob([content], { type: "application/json;charset=utf-8" }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    return true;
+  }
+  const selected = await save({
+    defaultPath: fileName,
+    filters: [{ name: "GrokDesk task export", extensions: ["json"] }],
+  });
+  if (typeof selected !== "string") return false;
+  const path = selected.toLocaleLowerCase().endsWith(".json")
+    ? selected
+    : `${selected}.json`;
+  await invoke("write_task_exchange_file", { path, content });
+  return true;
 }
 
 export async function inspectWorkspace(cwd: string): Promise<WorkspaceSnapshot> {

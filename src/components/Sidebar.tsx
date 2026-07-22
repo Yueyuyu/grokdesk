@@ -1,16 +1,22 @@
 import {
+  Archive,
+  ArrowCounterClockwise,
   CaretDown,
   Check,
   DotsThree,
+  DownloadSimple,
   FileText,
   GearSix,
+  GitFork,
   MagnifyingGlass,
   PencilSimple,
   Plus,
   PuzzlePiece,
   ShareNetwork,
+  ShieldCheck,
   SlidersHorizontal,
   Trash,
+  UploadSimple,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
@@ -36,13 +42,31 @@ interface SidebarProps {
   statusText: string;
   onStatusClick: () => void;
   tasks: GrokTask[];
+  archivedTasks: GrokTask[];
   activeTaskId: string | null;
   taskSwitchDisabled: boolean;
   onCreateTask: () => void;
   onSelectTask: (taskId: string) => void;
   onRenameTask: (taskId: string, title: string) => void;
   onDeleteTask: (taskId: string) => Promise<void>;
+  onBranchTask: (taskId: string) => void;
+  onArchiveTask: (taskId: string) => Promise<void>;
+  onRestoreTask: (taskId: string) => void;
+  onImportTask: () => Promise<void>;
+  onExportTask: (taskId: string) => Promise<void>;
 }
+
+type ExchangeAction =
+  | { kind: "import" }
+  | { kind: "export"; task: GrokTask };
+
+const taskStatusLabel = (task: GrokTask) => {
+  if (task.archivedAt) return "Archived";
+  if (task.status === "running") return "Running";
+  if (task.status === "complete") return "Done";
+  if (task.status === "error") return "Needs attention";
+  return "Ready";
+};
 
 export function Sidebar({
   active,
@@ -54,12 +78,18 @@ export function Sidebar({
   statusText,
   onStatusClick,
   tasks,
+  archivedTasks,
   activeTaskId,
   taskSwitchDisabled,
   onCreateTask,
   onSelectTask,
   onRenameTask,
   onDeleteTask,
+  onBranchTask,
+  onArchiveTask,
+  onRestoreTask,
+  onImportTask,
+  onExportTask,
 }: SidebarProps) {
   const [query, setQuery] = useState("");
   const [menuTaskId, setMenuTaskId] = useState<string | null>(null);
@@ -68,12 +98,19 @@ export function Sidebar({
   const [deleteCandidate, setDeleteCandidate] = useState<GrokTask | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [exchangeAction, setExchangeAction] = useState<ExchangeAction | null>(null);
+  const [exchangeBusy, setExchangeBusy] = useState(false);
+  const [exchangeError, setExchangeError] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query);
+  const taskCollection = showArchived ? archivedTasks : tasks;
   const filteredTasks = useMemo(
-    () => filterTasks(tasks, deferredQuery),
-    [deferredQuery, tasks],
+    () => filterTasks(taskCollection, deferredQuery),
+    [deferredQuery, taskCollection],
   );
-  const taskGroups = groupTasks(filteredTasks);
+  const taskGroups = showArchived
+    ? [{ label: "Archived", tasks: filteredTasks }]
+    : groupTasks(filteredTasks);
 
   const beginRename = (task: GrokTask) => {
     setRenamingTaskId(task.id);
@@ -136,6 +173,31 @@ export function Sidebar({
           <Plus size={16} weight="bold" />
           <span>New task</span>
         </button>
+        <div className="task-library-actions">
+          <button
+            type="button"
+            onClick={() => {
+              setExchangeError(null);
+              setExchangeAction({ kind: "import" });
+            }}
+            disabled={taskSwitchDisabled}
+          >
+            <UploadSimple size={14} /> Import
+          </button>
+          <button
+            type="button"
+            className={showArchived ? "is-active" : ""}
+            onClick={() => {
+              setShowArchived((current) => !current);
+              setQuery("");
+              setMenuTaskId(null);
+            }}
+            disabled={taskSwitchDisabled || archivedTasks.length === 0}
+          >
+            <Archive size={14} /> Archived
+            <span>{archivedTasks.length}</span>
+          </button>
+        </div>
       </div>
 
       <div className="task-history" aria-label="Recent tasks">
@@ -145,8 +207,8 @@ export function Sidebar({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search tasks"
-            aria-label="Search tasks"
+            placeholder={showArchived ? "Search archived tasks" : "Search tasks"}
+            aria-label={showArchived ? "Search archived tasks" : "Search tasks"}
           />
           {query ? (
             <button type="button" onClick={() => setQuery("")} aria-label="Clear task search">
@@ -191,14 +253,27 @@ export function Sidebar({
                     className="task-row__main"
                     onClick={() => {
                       setMenuTaskId(null);
-                      onSelectTask(task.id);
+                      if (task.archivedAt) {
+                        onRestoreTask(task.id);
+                        setShowArchived(false);
+                      } else {
+                        onSelectTask(task.id);
+                      }
                     }}
                     disabled={taskSwitchDisabled && task.id !== activeTaskId}
                     aria-current={task.id === activeTaskId ? "page" : undefined}
+                    title={task.archivedAt ? "Restore and open this task" : undefined}
                   >
                     <span className="task-row__title">{task.title}</span>
                     <span className="task-row__meta">
-                      {formatTaskTime(task.updatedAt)}
+                      {formatTaskTime(task.archivedAt || task.updatedAt)}
+                      <span>{taskStatusLabel(task)}</span>
+                      {task.origin === "branch" ? (
+                        <GitFork size={12} aria-label="Local branch" />
+                      ) : null}
+                      {task.origin === "import" ? (
+                        <UploadSimple size={12} aria-label="Imported task" />
+                      ) : null}
                       {task.status === "running" ? (
                         <span className="status-dot status-dot--blue" />
                       ) : null}
@@ -229,9 +304,58 @@ export function Sidebar({
                 ) : null}
                 {menuTaskId === task.id ? (
                   <div className="task-row__menu" role="menu">
-                    <button type="button" role="menuitem" onClick={() => beginRename(task)}>
-                      <PencilSimple size={13} /> Rename
+                    {!task.archivedAt ? (
+                      <>
+                        <button type="button" role="menuitem" onClick={() => beginRename(task)}>
+                          <PencilSimple size={13} /> Rename
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            onBranchTask(task.id);
+                            setMenuTaskId(null);
+                          }}
+                        >
+                          <GitFork size={13} /> Local branch
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          onRestoreTask(task.id);
+                          setShowArchived(false);
+                          setMenuTaskId(null);
+                        }}
+                      >
+                        <ArrowCounterClockwise size={13} /> Restore
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setExchangeError(null);
+                        setExchangeAction({ kind: "export", task });
+                        setMenuTaskId(null);
+                      }}
+                    >
+                      <DownloadSimple size={13} /> Export JSON
                     </button>
+                    {!task.archivedAt ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          void onArchiveTask(task.id);
+                          setMenuTaskId(null);
+                        }}
+                      >
+                        <Archive size={13} /> Archive
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       role="menuitem"
@@ -252,6 +376,13 @@ export function Sidebar({
         ))}
         {query && filteredTasks.length === 0 ? (
           <div className="task-search-empty">No tasks match “{query}”.</div>
+        ) : null}
+        {!query && taskCollection.length === 0 ? (
+          <div className="task-search-empty">
+            {showArchived
+              ? "No archived tasks. Archived transcripts stay on this device."
+              : "Create a task or import a GrokDesk task export."}
+          </div>
         ) : null}
       </div>
 
@@ -322,6 +453,76 @@ export function Sidebar({
                 }}
               >
                 Delete task
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {exchangeAction ? (
+        <div className="dialog-backdrop" role="presentation">
+          <section
+            className="task-exchange-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="task-exchange-title"
+          >
+            <header>
+              <span><ShieldCheck size={19} /></span>
+              <div>
+                <h2 id="task-exchange-title">
+                  {exchangeAction.kind === "import" ? "Import task data?" : "Export task data?"}
+                </h2>
+                <p>
+                  {exchangeAction.kind === "import"
+                    ? "Only choose a GrokDesk JSON export you trust. It will be validated and attached to the current workspace as a new local task."
+                    : `“${exchangeAction.task.title}” will be written to a JSON file that may contain private prompts, responses, file names, and workspace paths.`}
+                </p>
+              </div>
+            </header>
+            <div className="task-exchange-dialog__notice">
+              <strong>Credential boundary</strong>
+              <span>
+                OAuth tokens, cookies, MCP headers, attachment contents, and ACP session IDs are never included. Imports cannot reconnect the source session.
+              </span>
+            </div>
+            <div className="task-exchange-dialog__actions">
+              {exchangeError ? <span className="task-delete-dialog__error">{exchangeError}</span> : null}
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={exchangeBusy}
+                onClick={() => setExchangeAction(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={exchangeBusy}
+                onClick={async () => {
+                  setExchangeBusy(true);
+                  setExchangeError(null);
+                  try {
+                    if (exchangeAction.kind === "import") {
+                      await onImportTask();
+                      setShowArchived(false);
+                    } else {
+                      await onExportTask(exchangeAction.task.id);
+                    }
+                    setExchangeAction(null);
+                  } catch (cause) {
+                    setExchangeError(String(cause));
+                  } finally {
+                    setExchangeBusy(false);
+                  }
+                }}
+              >
+                {exchangeBusy
+                  ? "Working…"
+                  : exchangeAction.kind === "import"
+                    ? "Choose file"
+                    : "Choose location"}
               </button>
             </div>
           </section>

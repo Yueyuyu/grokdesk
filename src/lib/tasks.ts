@@ -3,16 +3,21 @@ import type {
   ChatEntry,
   GrokTask,
   PlanStep,
+  TaskOrigin,
   TaskStatus,
   ToolActivity,
 } from "../types";
 
-export const TASK_STORE_KEY = "grokdesk.tasks.v1";
-export const TASK_STORE_VERSION = 1;
+export const TASK_STORE_KEY = "grokdesk.tasks.v2";
+export const LEGACY_TASK_STORE_KEY = "grokdesk.tasks.v1";
+export const TASK_STORE_VERSION = 2;
 export const NEW_TASK_TITLE = "New task";
 
-const MAX_TASKS = 200;
+export const MAX_TASKS = 200;
 const MAX_MESSAGES_PER_TASK = 500;
+const MAX_PLAN_STEPS = 200;
+const MAX_TOOL_ACTIVITIES = 1_000;
+const MAX_ATTACHMENTS_PER_MESSAGE = 8;
 const MAX_TEXT_LENGTH = 100_000;
 
 export interface TaskStoreSnapshot {
@@ -32,6 +37,8 @@ const taskStatuses = new Set<TaskStatus>([
   "complete",
   "error",
 ]);
+
+const taskOrigins = new Set<TaskOrigin>(["created", "branch", "import"]);
 
 const planStatuses = new Set<PlanStep["status"]>([
   "complete",
@@ -117,7 +124,7 @@ const parseMessage = (value: unknown): ChatEntry | null => {
     content: safeString(candidate.content),
     attachments: Array.isArray(candidate.attachments)
       ? candidate.attachments
-          .slice(0, 8)
+          .slice(0, MAX_ATTACHMENTS_PER_MESSAGE)
           .map(parseAttachmentSummary)
           .filter(
             (attachment): attachment is ChatAttachmentSummary =>
@@ -178,6 +185,9 @@ const parseTask = (value: unknown): GrokTask | null => {
   const parsedStatus = taskStatuses.has(candidate.status as TaskStatus)
     ? (candidate.status as TaskStatus)
     : "idle";
+  const origin = taskOrigins.has(candidate.origin as TaskOrigin)
+    ? (candidate.origin as TaskOrigin)
+    : "created";
 
   return {
     id,
@@ -187,6 +197,14 @@ const parseTask = (value: unknown): GrokTask | null => {
     updatedAt,
     // A process cannot still be running after a full application restart.
     status: parsedStatus === "running" ? "idle" : parsedStatus,
+    archivedAt: safeIsoDate(candidate.archivedAt),
+    origin,
+    sourceTaskId:
+      origin === "branch" &&
+      typeof candidate.sourceTaskId === "string" &&
+      candidate.sourceTaskId
+        ? candidate.sourceTaskId.slice(0, 200)
+        : null,
     acpSessionId:
       typeof candidate.acpSessionId === "string" && candidate.acpSessionId
         ? candidate.acpSessionId.slice(0, 200)
@@ -200,11 +218,13 @@ const parseTask = (value: unknown): GrokTask | null => {
       : [],
     plan: Array.isArray(candidate.plan)
       ? candidate.plan
+          .slice(0, MAX_PLAN_STEPS)
           .map(parsePlanStep)
           .filter((step): step is PlanStep => step !== null)
       : [],
     tools: Array.isArray(candidate.tools)
       ? candidate.tools
+          .slice(0, MAX_TOOL_ACTIVITIES)
           .map(parseTool)
           .filter((tool): tool is ToolActivity => tool !== null)
       : [],
@@ -224,7 +244,7 @@ export function parseTaskStore(raw: string | null): TaskStoreSnapshot {
     const candidate = JSON.parse(raw) as Record<string, unknown>;
     if (
       !candidate ||
-      candidate.version !== TASK_STORE_VERSION ||
+      (candidate.version !== 1 && candidate.version !== TASK_STORE_VERSION) ||
       !Array.isArray(candidate.tasks)
     ) {
       return emptyTaskStore();
@@ -239,6 +259,9 @@ export function parseTaskStore(raw: string | null): TaskStoreSnapshot {
         return true;
       })
       .slice(0, MAX_TASKS);
+    const activeIds = new Set(
+      tasks.filter((task) => !task.archivedAt).map((task) => task.id),
+    );
 
     const activeTaskIds = Object.fromEntries(
       Object.entries(
@@ -247,7 +270,7 @@ export function parseTaskStore(raw: string | null): TaskStoreSnapshot {
           : {},
       ).filter(
         (entry): entry is [string, string] =>
-          typeof entry[1] === "string" && ids.has(entry[1]),
+          typeof entry[1] === "string" && activeIds.has(entry[1]),
       ),
     );
 
@@ -279,6 +302,9 @@ export function createTask(
     createdAt: timestamp,
     updatedAt: timestamp,
     status: "idle",
+    archivedAt: null,
+    origin: "created",
+    sourceTaskId: null,
     acpSessionId: null,
     messages: [],
     plan: [],
@@ -335,7 +361,11 @@ export function deleteTask(
 
   let tasks = snapshot.tasks.filter((task) => task.id !== taskId);
   let workspaceTasks = tasks
-    .filter((task) => workspaceStorageKey(task.workspacePath) === workspaceKey)
+    .filter(
+      (task) =>
+        workspaceStorageKey(task.workspacePath) === workspaceKey &&
+        !task.archivedAt,
+    )
     .sort(
       (left, right) =>
         new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
@@ -368,7 +398,10 @@ export function ensureWorkspaceTask(
 ) {
   const key = workspaceStorageKey(workspacePath);
   const workspaceTasks = snapshot.tasks
-    .filter((task) => workspaceStorageKey(task.workspacePath) === key)
+    .filter(
+      (task) =>
+        workspaceStorageKey(task.workspacePath) === key && !task.archivedAt,
+    )
     .sort(
       (left, right) =>
         new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
@@ -389,6 +422,117 @@ export function ensureWorkspaceTask(
     ...snapshot,
     tasks: [task, ...snapshot.tasks].slice(0, MAX_TASKS),
     activeTaskIds: { ...snapshot.activeTaskIds, [key]: task.id },
+  };
+}
+
+export function createTaskBranch(
+  source: GrokTask,
+  options: { id?: string; now?: Date } = {},
+): GrokTask {
+  const timestamp = (options.now ?? new Date()).toISOString();
+  return {
+    ...source,
+    id: options.id ?? createId(),
+    title: `${source.title} (branch)`.slice(0, 160),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    status: "idle",
+    archivedAt: null,
+    origin: "branch",
+    sourceTaskId: source.id,
+    // Grok Runtime does not expose a server-side session fork operation.
+    acpSessionId: null,
+    messages: source.messages.map((message) => ({
+      ...message,
+      attachments: message.attachments?.map((attachment) => ({ ...attachment })),
+      streaming: false,
+    })),
+    plan: source.plan.map((step) => ({ ...step })),
+    tools: source.tools.map((tool) => ({ ...tool })),
+  };
+}
+
+export function archiveTask(
+  snapshot: TaskStoreSnapshot,
+  taskId: string,
+  workspacePath: string,
+  options: { replacementId?: string; now?: Date } = {},
+) {
+  const workspaceKey = workspaceStorageKey(workspacePath);
+  const timestamp = (options.now ?? new Date()).toISOString();
+  let changed = false;
+  let tasks = snapshot.tasks.map((task) => {
+    if (
+      task.id !== taskId ||
+      task.archivedAt ||
+      workspaceStorageKey(task.workspacePath) !== workspaceKey
+    ) {
+      return task;
+    }
+    changed = true;
+    return {
+      ...task,
+      archivedAt: timestamp,
+      updatedAt: timestamp,
+      status: task.status === "running" ? ("idle" as const) : task.status,
+    };
+  });
+  if (!changed) return snapshot;
+
+  let activeTasks = tasks
+    .filter(
+      (task) =>
+        workspaceStorageKey(task.workspacePath) === workspaceKey &&
+        !task.archivedAt,
+    )
+    .sort(
+      (left, right) =>
+        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+    );
+  if (activeTasks.length === 0) {
+    const replacement = createTask(workspacePath, {
+      id: options.replacementId,
+      now: options.now,
+    });
+    tasks = [replacement, ...tasks].slice(0, MAX_TASKS);
+    activeTasks = [replacement];
+  }
+
+  const activeTaskIds = { ...snapshot.activeTaskIds };
+  if (
+    activeTaskIds[workspaceKey] === taskId ||
+    !activeTasks.some((task) => task.id === activeTaskIds[workspaceKey])
+  ) {
+    activeTaskIds[workspaceKey] = activeTasks[0].id;
+  }
+  return { ...snapshot, tasks, activeTaskIds };
+}
+
+export function restoreTask(
+  snapshot: TaskStoreSnapshot,
+  taskId: string,
+  workspacePath: string,
+  options: { now?: Date } = {},
+) {
+  const workspaceKey = workspaceStorageKey(workspacePath);
+  const timestamp = (options.now ?? new Date()).toISOString();
+  let changed = false;
+  const tasks = snapshot.tasks.map((task) => {
+    if (
+      task.id !== taskId ||
+      !task.archivedAt ||
+      workspaceStorageKey(task.workspacePath) !== workspaceKey
+    ) {
+      return task;
+    }
+    changed = true;
+    return { ...task, archivedAt: null, updatedAt: timestamp, status: "idle" as const };
+  });
+  if (!changed) return snapshot;
+  return {
+    ...snapshot,
+    tasks,
+    activeTaskIds: { ...snapshot.activeTaskIds, [workspaceKey]: taskId },
   };
 }
 

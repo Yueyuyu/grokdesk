@@ -150,6 +150,7 @@ export interface ToolActivity {
 }
 
 export type TaskStatus = "idle" | "running" | "complete" | "error";
+export type TaskOrigin = "created" | "branch" | "import";
 
 export interface GrokTask {
   id: string;
@@ -158,6 +159,9 @@ export interface GrokTask {
   createdAt: string;
   updatedAt: string;
   status: TaskStatus;
+  archivedAt: string | null;
+  origin: TaskOrigin;
+  sourceTaskId: string | null;
   acpSessionId: string | null;
   messages: ChatEntry[];
   plan: PlanStep[];

@@ -1,5 +1,6 @@
 mod grok_bridge;
 mod runtime_extensions;
+mod task_exchange;
 mod workspace;
 mod workspace_terminal;
 
@@ -15,6 +16,7 @@ use runtime_extensions::{
     list_grok_plugins, refresh_grok_plugin_marketplaces, remove_grok_mcp_server,
     set_grok_plugin_enabled, uninstall_grok_plugin, update_grok_plugin,
 };
+use task_exchange::{read_task_exchange_file, write_task_exchange_file};
 use workspace::{
     discard_workspace_change, get_workspace_diff, inspect_workspace, stage_workspace_change,
     unstage_workspace_change,
@@ -55,6 +57,8 @@ pub fn run() {
             fetch_grok_subscription,
             open_grok_subscription,
             respond_to_client_request,
+            read_task_exchange_file,
+            write_task_exchange_file,
             inspect_workspace,
             get_workspace_diff,
             stage_workspace_change,

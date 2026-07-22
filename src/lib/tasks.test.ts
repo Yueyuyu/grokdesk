@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  archiveTask,
+  createTaskBranch,
   createTask,
   deleteTask,
   deriveTaskTitle,
@@ -9,8 +11,15 @@ import {
   groupTasks,
   parseTaskStore,
   renameTask,
+  restoreTask,
+  TASK_STORE_VERSION,
   workspaceStorageKey,
 } from "./tasks";
+import {
+  MAX_TASK_EXCHANGE_BYTES,
+  parseTaskImport,
+  serializeTaskExport,
+} from "./taskExchange";
 
 describe("task persistence", () => {
   it("creates one honest empty task for a new workspace", () => {
@@ -24,6 +33,8 @@ describe("task persistence", () => {
       id: "task-1",
       title: "New task",
       status: "idle",
+      archivedAt: null,
+      origin: "created",
       acpSessionId: null,
       messages: [],
     });
@@ -71,6 +82,8 @@ describe("task persistence", () => {
     const restored = parseTaskStore(raw);
     expect(restored.tasks[0]).toMatchObject({
       status: "idle",
+      archivedAt: null,
+      origin: "created",
       acpSessionId: "session-123",
     });
     expect(restored.tasks[0].messages[0].streaming).toBe(false);
@@ -150,7 +163,7 @@ describe("task presentation", () => {
     });
     const renamed = renameTask(
       {
-        version: 1,
+        version: TASK_STORE_VERSION,
         tasks: [first],
         activeTaskIds: { [workspaceStorageKey(workspace)]: first.id },
       },
@@ -167,6 +180,152 @@ describe("task presentation", () => {
     expect(deleted.activeTaskIds[workspaceStorageKey(workspace)]).toBe(
       "replacement",
     );
+  });
+
+  it("creates an honest local branch without reusing the ACP session", () => {
+    const source = {
+      ...createTask("C:\\work\\app", {
+        id: "source",
+        now: new Date("2026-07-21T01:00:00.000Z"),
+      }),
+      title: "Review OAuth",
+      acpSessionId: "session-secret",
+      messages: [
+        {
+          id: "message-1",
+          role: "user" as const,
+          name: "You",
+          time: "09:00",
+          content: "Check the callback",
+        },
+      ],
+    };
+    const branch = createTaskBranch(source, {
+      id: "branch",
+      now: new Date("2026-07-21T02:00:00.000Z"),
+    });
+
+    expect(branch).toMatchObject({
+      id: "branch",
+      title: "Review OAuth (branch)",
+      origin: "branch",
+      sourceTaskId: "source",
+      acpSessionId: null,
+      status: "idle",
+    });
+    expect(branch.messages[0]).toMatchObject(source.messages[0]);
+    expect(branch.messages[0].streaming).toBe(false);
+    expect(branch.messages).not.toBe(source.messages);
+  });
+
+  it("archives, replaces, and restores tasks without selecting archived data", () => {
+    const workspace = "C:\\work\\app";
+    const source = createTask(workspace, {
+      id: "source",
+      now: new Date("2026-07-21T01:00:00.000Z"),
+    });
+    const initial = {
+      ...emptyTaskStore(),
+      tasks: [source],
+      activeTaskIds: { [workspaceStorageKey(workspace)]: source.id },
+    };
+    const archived = archiveTask(initial, source.id, workspace, {
+      replacementId: "replacement",
+      now: new Date("2026-07-21T02:00:00.000Z"),
+    });
+
+    expect(archived.tasks.find((task) => task.id === "source")?.archivedAt).toBe(
+      "2026-07-21T02:00:00.000Z",
+    );
+    expect(archived.activeTaskIds[workspaceStorageKey(workspace)]).toBe(
+      "replacement",
+    );
+
+    const restored = restoreTask(archived, source.id, workspace, {
+      now: new Date("2026-07-21T03:00:00.000Z"),
+    });
+    expect(restored.tasks.find((task) => task.id === "source")?.archivedAt).toBeNull();
+    expect(restored.activeTaskIds[workspaceStorageKey(workspace)]).toBe("source");
+  });
+
+  it("exports and imports transcripts without credentials or attachment contents", () => {
+    const source = {
+      ...createTask("C:\\private\\source", {
+        id: "source",
+        now: new Date("2026-07-21T01:00:00.000Z"),
+      }),
+      title: "Portable review",
+      acpSessionId: "session-must-not-export",
+      messages: [
+        {
+          id: "message-1",
+          role: "user" as const,
+          name: "You",
+          time: "09:00",
+          content: "Review this file",
+          attachments: [
+            {
+              name: "context.md",
+              mimeType: "text/markdown",
+              size: 128,
+              kind: "text" as const,
+              data: "attachment-body-must-not-export",
+            },
+          ],
+        },
+      ],
+    };
+    const exported = serializeTaskExport(source, {
+      now: new Date("2026-07-21T02:00:00.000Z"),
+    });
+    expect(exported).not.toContain("session-must-not-export");
+    expect(exported).not.toContain("attachment-body-must-not-export");
+
+    const imported = parseTaskImport(exported, "C:\\current\\workspace", {
+      id: "imported",
+      now: new Date("2026-07-21T03:00:00.000Z"),
+    });
+    expect(imported).toMatchObject({
+      id: "imported",
+      workspacePath: "C:\\current\\workspace",
+      origin: "import",
+      acpSessionId: null,
+      archivedAt: null,
+    });
+    expect(imported.messages[0].attachments?.[0]).toEqual({
+      name: "context.md",
+      mimeType: "text/markdown",
+      size: 128,
+      kind: "text",
+    });
+  });
+
+  it("rejects unsupported, malformed, and oversized task imports", () => {
+    expect(() => parseTaskImport("{}", "C:\\work\\app")).toThrow(
+      "supported GrokDesk task export",
+    );
+    expect(() =>
+      parseTaskImport("x".repeat(MAX_TASK_EXCHANGE_BYTES + 1), "C:\\work\\app"),
+    ).toThrow("8 MiB");
+
+    const valid = JSON.parse(
+      serializeTaskExport(createTask("C:\\work\\app")),
+    );
+    valid.task.messages = [{ id: "bad", role: "user", content: 42 }];
+    expect(() =>
+      parseTaskImport(JSON.stringify(valid), "C:\\work\\app"),
+    ).toThrow("messages");
+
+    const duplicateIds = JSON.parse(
+      serializeTaskExport(createTask("C:\\work\\app")),
+    );
+    duplicateIds.task.plan = [
+      { id: "same", title: "One", detail: "", status: "pending" },
+      { id: "same", title: "Two", detail: "", status: "pending" },
+    ];
+    expect(() =>
+      parseTaskImport(JSON.stringify(duplicateIds), "C:\\work\\app"),
+    ).toThrow("duplicate entry ID");
   });
 
   it("groups tasks by their real update date", () => {

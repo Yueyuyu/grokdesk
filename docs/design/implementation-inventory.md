@@ -60,6 +60,7 @@
 
 - Workspace selector and native folder picker.
 - Tasks, Plugins, MCP, and Settings navigation.
+- Task rename/delete, archive/restore, local branching with a fresh ACP session, and validated JSON import/export.
 - Resizable left and right panes plus inspector collapse.
 - Changes, Terminal, and Context tabs.
 - Changed-file selection and copy-diff action.

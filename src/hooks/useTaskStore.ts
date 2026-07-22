@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  archiveTask as archiveTaskInSnapshot,
+  createTaskBranch,
   createTask as createGrokTask,
   deleteTask as deleteTaskFromSnapshot,
+  emptyTaskStore,
   ensureWorkspaceTask,
+  LEGACY_TASK_STORE_KEY,
+  MAX_TASKS,
   parseTaskStore,
   renameTask as renameTaskInSnapshot,
+  restoreTask as restoreTaskInSnapshot,
   serializeTaskStore,
   TASK_STORE_KEY,
   workspaceStorageKey,
   type TaskStoreSnapshot,
 } from "../lib/tasks";
+import { parseTaskImport, serializeTaskExport } from "../lib/taskExchange";
 import { isWorkspaceSelected } from "../lib/workspace";
 import type { GrokTask } from "../types";
 
@@ -21,8 +28,11 @@ export type UpdateTask = (
 const loadSnapshot = (workspacePath: string) => {
   const stored =
     typeof window === "undefined"
-      ? { version: 1 as const, tasks: [], activeTaskIds: {} }
-      : parseTaskStore(window.localStorage.getItem(TASK_STORE_KEY));
+      ? emptyTaskStore()
+      : parseTaskStore(
+          window.localStorage.getItem(TASK_STORE_KEY) ??
+            window.localStorage.getItem(LEGACY_TASK_STORE_KEY),
+        );
 
   if (!isWorkspaceSelected(workspacePath)) return stored;
   return ensureWorkspaceTask(stored, workspacePath);
@@ -64,20 +74,28 @@ export function useTaskStore(workspacePath: string) {
     };
   }, []);
 
-  const tasks = useMemo(
-    () => {
-      if (!workspaceSelected) return [];
-      return snapshot.tasks
-        .filter(
-          (task) => workspaceStorageKey(task.workspacePath) === workspaceKey,
-        )
-        .sort(
-          (left, right) =>
-            new Date(right.updatedAt).getTime() -
-            new Date(left.updatedAt).getTime(),
-        );
-    },
+  const workspaceTasks = useMemo(
+    () =>
+      workspaceSelected
+        ? snapshot.tasks
+            .filter(
+              (task) => workspaceStorageKey(task.workspacePath) === workspaceKey,
+            )
+            .sort(
+              (left, right) =>
+                new Date(right.updatedAt).getTime() -
+                new Date(left.updatedAt).getTime(),
+            )
+        : [],
     [snapshot.tasks, workspaceKey, workspaceSelected],
+  );
+  const tasks = useMemo(
+    () => workspaceTasks.filter((task) => !task.archivedAt),
+    [workspaceTasks],
+  );
+  const archivedTasks = useMemo(
+    () => workspaceTasks.filter((task) => Boolean(task.archivedAt)),
+    [workspaceTasks],
   );
 
   const activeTaskId = workspaceSelected
@@ -90,7 +108,7 @@ export function useTaskStore(workspacePath: string) {
     const task = createGrokTask(workspacePath);
     setSnapshot((current) => ({
       ...current,
-      tasks: [task, ...current.tasks],
+      tasks: [task, ...current.tasks].slice(0, MAX_TASKS),
       activeTaskIds: {
         ...current.activeTaskIds,
         [workspaceStorageKey(workspacePath)]: task.id,
@@ -105,6 +123,7 @@ export function useTaskStore(workspacePath: string) {
         const belongsToWorkspace = current.tasks.some(
           (task) =>
             task.id === taskId &&
+            !task.archivedAt &&
             workspaceStorageKey(task.workspacePath) === workspaceKey,
         );
         if (!belongsToWorkspace) return current;
@@ -148,8 +167,71 @@ export function useTaskStore(workspacePath: string) {
     [workspacePath],
   );
 
+  const branchTask = useCallback(
+    (taskId: string) => {
+      const source = latestSnapshot.current.tasks.find(
+        (task) =>
+          task.id === taskId &&
+          !task.archivedAt &&
+          workspaceStorageKey(task.workspacePath) === workspaceKey,
+      );
+      if (!source) return null;
+      const branch = createTaskBranch(source);
+      setSnapshot((current) => ({
+        ...current,
+        tasks: [branch, ...current.tasks].slice(0, MAX_TASKS),
+        activeTaskIds: { ...current.activeTaskIds, [workspaceKey]: branch.id },
+      }));
+      return branch.id;
+    },
+    [workspaceKey],
+  );
+
+  const archiveTask = useCallback(
+    (taskId: string) => {
+      setSnapshot((current) =>
+        archiveTaskInSnapshot(current, taskId, workspacePath),
+      );
+    },
+    [workspacePath],
+  );
+
+  const restoreTask = useCallback(
+    (taskId: string) => {
+      setSnapshot((current) =>
+        restoreTaskInSnapshot(current, taskId, workspacePath),
+      );
+    },
+    [workspacePath],
+  );
+
+  const exportTask = useCallback((taskId: string) => {
+    const task = latestSnapshot.current.tasks.find(
+      (candidate) => candidate.id === taskId,
+    );
+    if (!task) throw new Error("The selected task no longer exists.");
+    return { title: task.title, content: serializeTaskExport(task) };
+  }, []);
+
+  const importTask = useCallback(
+    (raw: string) => {
+      if (!workspaceSelected) {
+        throw new Error("Choose a workspace before importing a task.");
+      }
+      const task = parseTaskImport(raw, workspacePath);
+      setSnapshot((current) => ({
+        ...current,
+        tasks: [task, ...current.tasks].slice(0, MAX_TASKS),
+        activeTaskIds: { ...current.activeTaskIds, [workspaceKey]: task.id },
+      }));
+      return task.id;
+    },
+    [workspaceKey, workspacePath, workspaceSelected],
+  );
+
   return {
     tasks,
+    archivedTasks,
     activeTask,
     activeTaskId,
     createTask,
@@ -157,5 +239,10 @@ export function useTaskStore(workspacePath: string) {
     updateTask,
     renameTask,
     deleteTask,
+    branchTask,
+    archiveTask,
+    restoreTask,
+    exportTask,
+    importTask,
   };
 }

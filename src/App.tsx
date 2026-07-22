@@ -19,7 +19,12 @@ import { useGrokRuntime } from "./hooks/useGrokRuntime";
 import { useTaskStore } from "./hooks/useTaskStore";
 import { useWorkspaceChanges } from "./hooks/useWorkspaceChanges";
 import { useWorkspaceTerminal } from "./hooks/useWorkspaceTerminal";
-import { chooseWorkspace, isDesktopRuntime } from "./lib/desktop";
+import {
+  chooseWorkspace,
+  isDesktopRuntime,
+  readTaskExchangeFile,
+  writeTaskExchangeFile,
+} from "./lib/desktop";
 import { getRuntimeSetupStep } from "./lib/runtime";
 import { isWorkspaceSelected } from "./lib/workspace";
 import type { InspectorTab, NavigationKey, ThemePreference } from "./types";
@@ -154,6 +159,7 @@ export function App() {
           statusText={grok.statusText}
           onStatusClick={() => setActiveNavigation("settings")}
           tasks={taskStore.tasks}
+          archivedTasks={taskStore.archivedTasks}
           activeTaskId={taskStore.activeTaskId}
           taskSwitchDisabled={grok.busy || terminal.running || !workspaceReady}
           onCreateTask={() => {
@@ -165,6 +171,30 @@ export function App() {
             setActiveNavigation("tasks");
           }}
           onRenameTask={taskStore.renameTask}
+          onBranchTask={(taskId) => {
+            taskStore.branchTask(taskId);
+            setActiveNavigation("tasks");
+          }}
+          onArchiveTask={async (taskId) => {
+            if (taskId === taskStore.activeTaskId && grok.sessionId) {
+              await grok.disconnect();
+            }
+            taskStore.archiveTask(taskId);
+          }}
+          onRestoreTask={(taskId) => {
+            taskStore.restoreTask(taskId);
+            setActiveNavigation("tasks");
+          }}
+          onImportTask={async () => {
+            const raw = await readTaskExchangeFile();
+            if (raw === null) return;
+            taskStore.importTask(raw);
+            setActiveNavigation("tasks");
+          }}
+          onExportTask={async (taskId) => {
+            const exported = taskStore.exportTask(taskId);
+            await writeTaskExchangeFile(exported.title, exported.content);
+          }}
           onDeleteTask={async (taskId) => {
             if (taskId === taskStore.activeTaskId && grok.sessionId) {
               await grok.disconnect();

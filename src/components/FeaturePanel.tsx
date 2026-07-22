@@ -86,7 +86,7 @@ export function FeaturePanel({
     <main className="feature-panel feature-panel--settings">
       <header className="feature-panel__header">
         <div><h1>Settings</h1><p>Runtime、Grok 账号、订阅与界面偏好。</p></div>
-        <span className="version-chip">GrokDesk v0.1.9</span>
+        <span className="version-chip">GrokDesk v0.2.0</span>
       </header>
 
       {preview ? (
