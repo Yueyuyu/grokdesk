@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src/assets/grokdesk-icon.png" width="88" alt="GrokDesk アイコン" />
+  <img src="src/assets/grokdesk-icon.png" width="112" alt="GrokDesk アイコン" />
 </p>
 
 <h1 align="center">GrokDesk</h1>
@@ -15,9 +15,30 @@
 </p>
 
 <p align="center">
-  <img alt="バージョン 0.1.9" src="https://img.shields.io/badge/version-0.1.9-2563eb" />
-  <img alt="Windows" src="https://img.shields.io/badge/platform-Windows-2563eb" />
-  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-16a34a" /></a>
+  <a href="https://github.com/Yueyuyu/grokdesk/releases/latest"><img alt="最新リリース" src="https://img.shields.io/github/v/release/Yueyuyu/grokdesk?display_name=tag&amp;sort=semver&amp;style=flat-square&amp;color=2563eb" /></a>
+  <a href="https://github.com/Yueyuyu/grokdesk/actions/workflows/ci.yml"><img alt="継続的インテグレーション" src="https://github.com/Yueyuyu/grokdesk/actions/workflows/ci.yml/badge.svg?branch=main" /></a>
+  <a href="https://github.com/Yueyuyu/grokdesk/stargazers"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/Yueyuyu/grokdesk?style=flat-square&amp;color=f59e0b" /></a>
+  <a href="https://github.com/Yueyuyu/grokdesk/forks"><img alt="GitHub Forks" src="https://img.shields.io/github/forks/Yueyuyu/grokdesk?style=flat-square" /></a>
+  <a href="https://github.com/Yueyuyu/grokdesk/issues"><img alt="GitHub Issues" src="https://img.shields.io/github/issues/Yueyuyu/grokdesk?style=flat-square" /></a>
+  <a href="https://github.com/Yueyuyu/grokdesk/releases"><img alt="総ダウンロード数" src="https://img.shields.io/github/downloads/Yueyuyu/grokdesk/total?style=flat-square&amp;color=16a34a" /></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/github/license/Yueyuyu/grokdesk?style=flat-square&amp;color=16a34a" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Yueyuyu/grokdesk/releases/latest"><strong>最新版をダウンロード</strong></a> ·
+  <a href="#主な機能">機能</a> ·
+  <a href="#インストールと初回起動">インストール</a> ·
+  <a href="#ローカル開発">開発</a> ·
+  <a href="#現在の制限とロードマップ">ロードマップ</a>
+</p>
+
+<p align="center">
+  <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-24C8DB?style=flat-square&amp;logo=tauri&amp;logoColor=white" />
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-149ECA?style=flat-square&amp;logo=react&amp;logoColor=white" />
+  <img alt="TypeScript 5.9" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&amp;logo=typescript&amp;logoColor=white" />
+  <img alt="Rust" src="https://img.shields.io/badge/Rust-native-000000?style=flat-square&amp;logo=rust&amp;logoColor=white" />
+  <img alt="ACP" src="https://img.shields.io/badge/Protocol-ACP-7C3AED?style=flat-square" />
+  <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square&amp;logo=windows11&amp;logoColor=white" />
 </p>
 
 > [!IMPORTANT]
