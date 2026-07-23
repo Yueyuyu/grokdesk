@@ -32,6 +32,7 @@ import { MarkdownContent } from "./MarkdownContent";
 interface TaskWorkspaceProps {
   task: GrokTask | null;
   busy: boolean;
+  runningInBackground: number;
   onSend: (text: string, attachments: PromptAttachment[]) => Promise<void>;
   onCancel: () => Promise<void>;
   onRetry: () => Promise<void>;
@@ -212,6 +213,7 @@ const statusLabels: Record<GrokTask["status"], string> = {
 export function TaskWorkspace({
   task,
   busy,
+  runningInBackground,
   onSend,
   onCancel,
   onRetry,
@@ -278,6 +280,18 @@ export function TaskWorkspace({
                   : "Loading"}
             </strong>
           </p>
+          {runningInBackground > 0 ? (
+            <p
+              className="background-task-indicator"
+              role="status"
+              aria-live="polite"
+            >
+              <SpinnerGap size={13} weight="bold" className="spin" />
+              {runningInBackground} other{" "}
+              {runningInBackground === 1 ? "task is" : "tasks are"} running in
+              the background
+            </p>
+          ) : null}
         </div>
         <div className="task-header__actions">
           {task?.status === "error" ? (

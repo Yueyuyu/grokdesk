@@ -7,7 +7,7 @@ mod task_exchange;
 mod workspace;
 mod workspace_terminal;
 
-use tauri::Manager;
+use tauri::{Manager, UserAttentionType};
 
 use diagnostics::{run_diagnostics, write_diagnostic_report};
 use grok_bridge::{
@@ -28,6 +28,19 @@ use workspace::{
     unstage_workspace_change,
 };
 use workspace_terminal::{cancel_workspace_command, run_workspace_command, WorkspaceTerminal};
+
+#[tauri::command]
+fn request_task_attention(app: tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "The GrokDesk window is not available.".to_string())?;
+    if !window.is_focused().unwrap_or(false) {
+        window
+            .request_user_attention(Some(UserAttentionType::Informational))
+            .map_err(|error| format!("Could not request taskbar attention: {error}"))?;
+    }
+    Ok(())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -76,6 +89,7 @@ pub fn run() {
             discard_workspace_change,
             run_workspace_command,
             cancel_workspace_command,
+            request_task_attention,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run GrokDesk");

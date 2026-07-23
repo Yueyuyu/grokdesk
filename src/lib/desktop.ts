@@ -119,6 +119,7 @@ export async function writeDiagnosticReportFile(
 }
 
 export async function startAcpSession(
+  taskId: string,
   cwd: string,
   resumeSessionId: string | null = null,
   runtimeProfile: RuntimeLaunchProfile = {
@@ -130,7 +131,7 @@ export async function startAcpSession(
     return {
       sessionId:
         resumeSessionId ??
-        `browser-preview-${
+        `browser-preview-${taskId}-${
           typeof crypto !== "undefined" && "randomUUID" in crypto
             ? crypto.randomUUID()
             : Date.now()
@@ -145,6 +146,7 @@ export async function startAcpSession(
     };
   }
   return invoke<AcpSessionInfo>("start_acp_session", {
+    taskId,
     cwd,
     resumeSessionId,
     modelId: runtimeProfile.modelId,
@@ -153,27 +155,28 @@ export async function startAcpSession(
 }
 
 export async function sendAcpPrompt(
+  taskId: string,
   text: string,
   attachments: PromptAttachment[] = [],
 ): Promise<void> {
   if (!isDesktopRuntime()) {
     return;
   }
-  await invoke("send_acp_prompt", { text, attachments });
+  await invoke("send_acp_prompt", { taskId, text, attachments });
 }
 
-export async function cancelAcpTurn(): Promise<void> {
+export async function cancelAcpTurn(taskId: string): Promise<void> {
   if (!isDesktopRuntime()) {
     return;
   }
-  await invoke("cancel_acp_turn");
+  await invoke("cancel_acp_turn", { taskId });
 }
 
-export async function stopAcpSession(): Promise<void> {
+export async function stopAcpSession(taskId: string | null = null): Promise<void> {
   if (!isDesktopRuntime()) {
     return;
   }
-  await invoke("stop_acp_session");
+  await invoke("stop_acp_session", { taskId });
 }
 
 export async function launchOAuth(): Promise<OAuthResult> {
@@ -197,7 +200,7 @@ export async function installGrokCli(): Promise<RuntimeStatus> {
   return invoke<RuntimeStatus>("install_grok_cli");
 }
 
-export async function fetchGrokSubscription(): Promise<GrokSubscription> {
+export async function fetchGrokSubscription(taskId: string): Promise<GrokSubscription> {
   if (!isDesktopRuntime()) {
     if (localStorage.getItem(PREVIEW_AUTH_KEY) !== "true") {
       throw new Error("Complete the simulated OAuth step before checking a subscription.");
@@ -212,7 +215,7 @@ export async function fetchGrokSubscription(): Promise<GrokSubscription> {
         "Browser preview only: no real Grok account, subscription, or quota data is available.",
     };
   }
-  return invoke<GrokSubscription>("fetch_grok_subscription");
+  return invoke<GrokSubscription>("fetch_grok_subscription", { taskId });
 }
 
 export async function openGrokSubscription(): Promise<void> {
@@ -344,11 +347,20 @@ export async function diagnoseGrokMcpServer(
   });
 }
 
-export async function answerClientRequest(id: number, result: unknown): Promise<void> {
+export async function answerClientRequest(
+  taskId: string,
+  id: number,
+  result: unknown,
+): Promise<void> {
   if (!isDesktopRuntime()) {
     return;
   }
-  await invoke("respond_to_client_request", { id, result });
+  await invoke("respond_to_client_request", { taskId, id, result });
+}
+
+export async function requestTaskAttention(): Promise<void> {
+  if (!isDesktopRuntime()) return;
+  await invoke("request_task_attention");
 }
 
 export async function chooseWorkspace(): Promise<string | null> {

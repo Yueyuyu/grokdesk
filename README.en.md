@@ -55,6 +55,7 @@ The agent itself remains the official Grok Build CLI. GrokDesk focuses on the de
 | Capability | Current behavior |
 | --- | --- |
 | Real ACP sessions | Runs the official `grok agent stdio` process with `session/new`, `session/load`, streaming updates, cancellation, and permission handling |
+| Background ACP tasks | Keeps up to four task-scoped official Runtime clients. Startup is serialized to avoid the current CLI's concurrent-initialization stall, then initialized tasks run in parallel; switching or creating tasks does not interrupt output, and completion, failure, or permission notifications open the correct task |
 | Polished responses | Safely renders GFM Markdown: headings, lists, task lists, links, tables, quotes, inline code, and copyable code blocks |
 | Stable reading | The response pane scrolls independently; streaming does not pull users away after they scroll up, and “Back to latest” restores follow mode |
 | Docked Tools | Tool activity stays directly above the composer, shows the five latest items, and expands to the full activity list |

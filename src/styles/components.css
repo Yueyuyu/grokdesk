@@ -50,6 +50,7 @@
 .nav-row.is-active { border-color: var(--border); background: var(--bg-elevated); color: var(--text-primary); box-shadow: 0 1px 2px rgba(27, 39, 55, 0.04); }
 .nav-row > span:nth-child(2) { font-size: 12.5px; font-weight: 500; }
 .nav-row__count { display: inline-grid; min-width: 20px; height: 20px; padding: 0 5px; place-items: center; border-radius: 999px; background: var(--bg-hover); color: var(--text-secondary); font-size: 9px; }
+.nav-row__count--running { background: var(--blue-soft); color: var(--blue); }
 .nav-row__count--attention { background: var(--amber-soft); color: var(--amber); }
 
 .new-task-button {
@@ -108,6 +109,7 @@
 .task-row__meta { display: flex; min-width: 0; align-items: center; gap: 6px; overflow: hidden; color: var(--text-secondary); font-size: 10px; white-space: nowrap; }
 .task-row__meta > span:not(.status-dot) { overflow: hidden; text-overflow: ellipsis; }
 .task-row__meta svg { color: var(--green); }
+.task-row__meta .task-row__permission { color: var(--amber); }
 .task-row__meta .task-row__error { color: var(--red); }
 .task-row__meta .status-dot { width: 6px; height: 6px; }
 .task-row__more { align-self: center; width: 25px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-tertiary); opacity: 0; }
@@ -116,6 +118,8 @@
 .task-row__menu { position: absolute; z-index: 35; top: 39px; right: 3px; display: grid; width: 154px; padding: 4px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-elevated); box-shadow: var(--shadow-composer); }
 .task-row__menu button { display: flex; height: 29px; align-items: center; gap: 7px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: var(--text-secondary); font-size: 10.5px; text-align: left; }
 .task-row__menu button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.task-row__menu button:disabled { cursor: not-allowed; opacity: 0.42; }
+.task-row__menu button:disabled:hover { background: transparent; color: var(--text-secondary); }
 .task-row__menu button.is-danger { color: var(--red); }
 .task-row__rename { display: grid; min-width: 0; grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) 25px; align-items: center; gap: 4px; padding: 7px 7px 7px 10px; }
 .task-row__rename input { width: 100%; min-width: 0; height: 30px; padding: 0 7px; border: 1px solid color-mix(in srgb, var(--blue) 48%, var(--border)); border-radius: 5px; background: var(--bg-elevated); color: var(--text-primary); font-size: 10.5px; }
@@ -167,6 +171,7 @@
 .task-header p .task-status--running { color: var(--blue); }
 .task-header p .task-status--complete { color: var(--green); }
 .task-header p .task-status--error { color: var(--red); }
+.task-header p.background-task-indicator { margin-top: 7px; color: var(--blue); font-size: 9.5px; }
 .task-header__actions { display: flex; flex: 0 0 auto; gap: 9px; }
 
 .conversation hr {
@@ -920,5 +925,9 @@
 .error-toast, .status-toast { position: fixed; right: 18px; z-index: 80; max-width: 430px; padding: 11px 14px; border-radius: var(--radius-sm); box-shadow: var(--shadow-composer); font-size: 10.5px; pointer-events: none; }
 .error-toast { bottom: 18px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid color-mix(in srgb, var(--red) 35%, var(--border)); background: var(--red-soft); color: var(--red); }
 .status-toast { bottom: 64px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid color-mix(in srgb, var(--green) 35%, var(--border)); background: var(--green-soft); color: var(--green); }
+.status-toast--info { border-color: color-mix(in srgb, var(--blue) 35%, var(--border)); background: var(--blue-soft); color: var(--blue); }
+.status-toast--permission { border-color: color-mix(in srgb, var(--amber) 35%, var(--border)); background: var(--amber-soft); color: var(--amber); }
+.status-toast--error { border-color: color-mix(in srgb, var(--red) 35%, var(--border)); background: var(--red-soft); color: var(--red); }
 .status-toast span, .error-toast span { flex: 1; }
 .status-toast button, .error-toast button { display: grid; width: 18px; height: 18px; padding: 0; place-items: center; border: 0; background: transparent; color: inherit; font-size: 15px; line-height: 16px; pointer-events: auto; }
+.status-toast button.status-toast__open { display: inline-flex; width: auto; min-width: max-content; height: 23px; align-items: center; padding: 0 7px; border: 1px solid currentColor; border-radius: 5px; font-size: 9.5px; line-height: 1; }

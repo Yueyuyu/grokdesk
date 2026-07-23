@@ -48,6 +48,9 @@ interface SidebarProps {
   archivedTasks: GrokTask[];
   activeTaskId: string | null;
   pendingPermissionCount: number;
+  runningTaskIds: string[];
+  pendingPermissionTaskIds: string[];
+  attentionTaskIds: string[];
   taskSwitchDisabled: boolean;
   onCreateTask: () => void;
   onSelectTask: (taskId: string) => void;
@@ -64,9 +67,16 @@ type ExchangeAction =
   | { kind: "import" }
   | { kind: "export"; task: GrokTask };
 
-const taskStatusLabel = (task: GrokTask) => {
+const taskStatusLabel = (
+  task: GrokTask,
+  running: boolean,
+  needsPermission: boolean,
+  needsAttention: boolean,
+) => {
   if (task.archivedAt) return "Archived";
-  if (task.status === "running") return "Running";
+  if (needsPermission) return "Needs permission";
+  if (running) return "Running";
+  if (needsAttention && task.status === "complete") return "Finished";
   if (task.status === "complete") return "Done";
   if (task.status === "error") return "Needs attention";
   return "Ready";
@@ -85,6 +95,9 @@ export function Sidebar({
   archivedTasks,
   activeTaskId,
   pendingPermissionCount,
+  runningTaskIds,
+  pendingPermissionTaskIds,
+  attentionTaskIds,
   taskSwitchDisabled,
   onCreateTask,
   onSelectTask,
@@ -108,6 +121,18 @@ export function Sidebar({
   const [exchangeBusy, setExchangeBusy] = useState(false);
   const [exchangeError, setExchangeError] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query);
+  const runningTaskIdSet = useMemo(
+    () => new Set(runningTaskIds),
+    [runningTaskIds],
+  );
+  const pendingPermissionTaskIdSet = useMemo(
+    () => new Set(pendingPermissionTaskIds),
+    [pendingPermissionTaskIds],
+  );
+  const attentionTaskIdSet = useMemo(
+    () => new Set(attentionTaskIds),
+    [attentionTaskIds],
+  );
   const taskCollection = showArchived ? archivedTasks : tasks;
   const filteredTasks = useMemo(
     () => filterTasks(taskCollection, deferredQuery),
@@ -162,7 +187,24 @@ export function Sidebar({
               <Icon size={19} weight="regular" />
               <span>{label}</span>
               {id === "tasks" && tasks.length > 0 ? (
-                <span className="nav-row__count">{tasks.length}</span>
+                <span
+                  className={`nav-row__count ${
+                    runningTaskIds.length > 0
+                      ? "nav-row__count--running"
+                      : ""
+                  }`}
+                  title={
+                    runningTaskIds.length > 0
+                      ? `${runningTaskIds.length} Grok ${
+                          runningTaskIds.length === 1 ? "task is" : "tasks are"
+                        } running`
+                      : `${tasks.length} local tasks`
+                  }
+                >
+                  {runningTaskIds.length > 0
+                    ? `${runningTaskIds.length} active`
+                    : tasks.length}
+                </span>
               ) : id === "permissions" && pendingPermissionCount > 0 ? (
                 <span className="nav-row__count nav-row__count--attention">{pendingPermissionCount}</span>
               ) : null}
@@ -226,8 +268,14 @@ export function Sidebar({
         {taskGroups.map((group) => (
           <section key={group.label} className="task-group">
             <h2>{group.label}</h2>
-            {group.tasks.map((task) => (
-              <div
+            {group.tasks.map((task) => {
+              const taskRunning = runningTaskIdSet.has(task.id);
+              const taskNeedsPermission =
+                pendingPermissionTaskIdSet.has(task.id);
+              const taskNeedsAttention = attentionTaskIdSet.has(task.id);
+              const taskActionLocked = taskRunning || taskNeedsPermission;
+              return (
+                <div
                 key={task.id}
                 className={`task-row ${task.id === activeTaskId ? "is-selected" : ""}`}
               >
@@ -274,20 +322,33 @@ export function Sidebar({
                     <span className="task-row__title">{task.title}</span>
                     <span className="task-row__meta">
                       {formatTaskTime(task.archivedAt || task.updatedAt)}
-                      <span>{taskStatusLabel(task)}</span>
+                      <span>
+                        {taskStatusLabel(
+                          task,
+                          taskRunning,
+                          taskNeedsPermission,
+                          taskNeedsAttention,
+                        )}
+                      </span>
                       {task.origin === "branch" ? (
                         <GitFork size={12} aria-label="Local branch" />
                       ) : null}
                       {task.origin === "import" ? (
                         <UploadSimple size={12} aria-label="Imported task" />
                       ) : null}
-                      {task.status === "running" ? (
+                      {taskNeedsPermission ? (
+                        <WarningCircle
+                          size={13}
+                          weight="fill"
+                          className="task-row__permission"
+                        />
+                      ) : taskRunning ? (
                         <span className="status-dot status-dot--blue" />
-                      ) : null}
-                      {task.status === "complete" ? (
+                      ) : taskNeedsAttention ? (
+                        <span className="status-dot status-dot--amber" />
+                      ) : task.status === "complete" ? (
                         <Check size={13} weight="bold" />
-                      ) : null}
-                      {task.status === "error" ? (
+                      ) : task.status === "error" ? (
                         <WarningCircle
                           size={13}
                           weight="fill"
@@ -319,6 +380,12 @@ export function Sidebar({
                         <button
                           type="button"
                           role="menuitem"
+                          disabled={taskActionLocked}
+                          title={
+                            taskActionLocked
+                              ? "Wait for this task to finish before branching."
+                              : undefined
+                          }
                           onClick={() => {
                             onBranchTask(task.id);
                             setMenuTaskId(null);
@@ -343,6 +410,12 @@ export function Sidebar({
                     <button
                       type="button"
                       role="menuitem"
+                      disabled={taskActionLocked}
+                      title={
+                        taskActionLocked
+                          ? "Wait for this task to finish before exporting."
+                          : undefined
+                      }
                       onClick={() => {
                         setExchangeError(null);
                         setExchangeAction({ kind: "export", task });
@@ -355,6 +428,12 @@ export function Sidebar({
                       <button
                         type="button"
                         role="menuitem"
+                        disabled={taskActionLocked}
+                        title={
+                          taskActionLocked
+                            ? "Wait for this task to finish before archiving."
+                            : undefined
+                        }
                         onClick={() => {
                           void onArchiveTask(task.id);
                           setMenuTaskId(null);
@@ -367,6 +446,12 @@ export function Sidebar({
                       type="button"
                       role="menuitem"
                       className="is-danger"
+                      disabled={taskActionLocked}
+                      title={
+                        taskActionLocked
+                          ? "Wait for this task to finish before deleting."
+                          : undefined
+                      }
                       onClick={() => {
                         setDeleteCandidate(task);
                         setDeleteError(null);
@@ -377,8 +462,9 @@ export function Sidebar({
                     </button>
                   </div>
                 ) : null}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </section>
         ))}
         {query && filteredTasks.length === 0 ? (

@@ -85,6 +85,7 @@
 - Changed-file selection and copy-diff action.
 - Composer input, send, cancel, attach, mention, and branch selection controls.
 - Real Grok binary detection, official OAuth launch, ACP session start, streamed session updates, permission response, and cancellation.
+- Up to four task-scoped official ACP clients with serialized process initialization, concurrent turns, idle-only LRU release, background completion/permission indicators, actionable in-app notifications, and Windows taskbar attention.
 - Light/dark/system theme selection with shared layout and component geometry.
 
 ## Media treatment

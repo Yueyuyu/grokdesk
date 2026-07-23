@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { normalizeSessionUpdate, planFromUpdate, toolFromUpdate } from "../lib/acp";
 import type { RecordAuditEvent } from "../lib/audit";
 import {
+  backgroundTaskCount,
+  parseTaskScopedEvent,
+  type TaskSessionStatus,
+} from "../lib/backgroundRuntime";
+import {
   answerClientRequest,
   cancelAcpTurn,
   fetchGrokSubscription,
@@ -12,6 +17,7 @@ import {
   listenDesktopEvent,
   openGrokSubscription,
   probeRuntime,
+  requestTaskAttention,
   sendAcpPrompt,
   startAcpSession,
   stopAcpSession,
@@ -24,6 +30,7 @@ import {
 import { isWorkspaceSelected } from "../lib/workspace";
 import type { UpdateTask } from "./useTaskStore";
 import type {
+  AcpSessionInfo,
   ChatEntry,
   GrokSubscription,
   GrokTask,
@@ -42,6 +49,14 @@ interface ClientRequestPayload {
   method: string;
   params?: Record<string, unknown>;
 }
+
+interface RuntimeNotice {
+  message: string;
+  taskId: string | null;
+  kind: "info" | "success" | "error" | "permission";
+}
+
+const GLOBAL_LOG_KEY = "__grokdesk_global__";
 
 const formatTime = () =>
   new Intl.DateTimeFormat("en", {
@@ -82,16 +97,21 @@ export function useGrokRuntime(
   recordAuditEvent: RecordAuditEvent,
 ) {
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [promptCapabilities, setPromptCapabilities] =
-    useState<PromptCapabilities | null>(null);
-  const [runtimeModelState, setRuntimeModelState] =
+  const [sessionsByTask, setSessionsByTask] = useState<
+    Record<string, AcpSessionInfo>
+  >({});
+  const [inspectedRuntimeModelState, setInspectedRuntimeModelState] =
     useState<RuntimeModelState | null>(null);
   const [defaultRuntimeProfile, setDefaultRuntimeProfile] =
     useState<RuntimeLaunchProfile>(loadDefaultRuntimeProfile);
-  const [terminalLines, setTerminalLines] = useState<string[]>([]);
-  const [permission, setPermission] = useState<PermissionRequest | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [terminalLinesByTask, setTerminalLinesByTask] = useState<
+    Record<string, string[]>
+  >({});
+  const [permissionsByTask, setPermissionsByTask] = useState<
+    Record<string, PermissionRequest>
+  >({});
+  const [runningTaskIds, setRunningTaskIds] = useState<string[]>([]);
+  const [attentionTaskIds, setAttentionTaskIds] = useState<string[]>([]);
   const [installing, setInstalling] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
@@ -100,29 +120,103 @@ export function useGrokRuntime(
   const [subscription, setSubscription] = useState<GrokSubscription | null>(null);
   const [statusText, setStatusText] = useState("Inspecting Grok Build…");
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<RuntimeNotice | null>(null);
   const mounted = useRef(true);
   const activeTaskRef = useRef(activeTask);
-  const sessionIdRef = useRef<string | null>(null);
-  const sessionTaskIdRef = useRef<string | null>(null);
-  const ignoreSessionUpdatesRef = useRef(false);
-  const connectionQueueRef = useRef<Promise<unknown>>(Promise.resolve());
-  const turnCancelledRef = useRef(false);
+  const sessionsRef = useRef(new Map<string, AcpSessionInfo>());
+  const runningTaskIdsRef = useRef(new Set<string>());
+  const ignoredSessionTaskIdsRef = useRef(new Set<string>());
+  const connectionQueuesRef = useRef(new Map<string, Promise<unknown>>());
+  const cancelledTaskIdsRef = useRef(new Set<string>());
   const accountAutoRefreshStarted = useRef(false);
 
   activeTaskRef.current = activeTask;
+  const activeTaskId = activeTask?.id ?? null;
+  const activeSession = activeTaskId
+    ? sessionsByTask[activeTaskId] ?? null
+    : null;
+  const sessionId = activeSession?.sessionId ?? null;
+  const promptCapabilities: PromptCapabilities | null =
+    activeSession?.promptCapabilities ?? null;
+  const runtimeModelState =
+    activeSession?.runtimeModelState ?? inspectedRuntimeModelState;
+  const permission = activeTaskId
+    ? permissionsByTask[activeTaskId] ?? null
+    : null;
+  const pendingPermissionTaskIds = Object.keys(permissionsByTask);
+  const busy = activeTaskId
+    ? runningTaskIds.includes(activeTaskId)
+    : false;
+  const anyBusy = runningTaskIds.length > 0;
+  const hasAnyPermission = pendingPermissionTaskIds.length > 0;
+  const terminalLines = [
+    ...(terminalLinesByTask[GLOBAL_LOG_KEY] ?? []),
+    ...(activeTaskId ? terminalLinesByTask[activeTaskId] ?? [] : []),
+  ].slice(-120);
+  const runningInBackground = backgroundTaskCount(
+    runningTaskIds,
+    activeTaskId,
+  );
 
-  const showNotice = useCallback((message: string) => {
-    setNotice(message);
-  }, []);
-
-  const setConnectedSession = useCallback(
-    (nextSessionId: string | null, taskId: string | null) => {
-      sessionIdRef.current = nextSessionId;
-      sessionTaskIdRef.current = taskId;
-      setSessionId(nextSessionId);
+  const showNotice = useCallback(
+    (
+      message: string,
+      options: {
+        taskId?: string | null;
+        kind?: RuntimeNotice["kind"];
+      } = {},
+    ) => {
+      setNotice({
+        message,
+        taskId: options.taskId ?? null,
+        kind: options.kind ?? "info",
+      });
     },
     [],
+  );
+
+  const setTaskSession = useCallback(
+    (taskId: string, session: AcpSessionInfo | null) => {
+      if (session) {
+        sessionsRef.current.set(taskId, session);
+      } else {
+        sessionsRef.current.delete(taskId);
+      }
+      setSessionsByTask(Object.fromEntries(sessionsRef.current));
+    },
+    [],
+  );
+
+  const setTaskRunning = useCallback((taskId: string, running: boolean) => {
+    if (running) {
+      runningTaskIdsRef.current.add(taskId);
+    } else {
+      runningTaskIdsRef.current.delete(taskId);
+    }
+    setRunningTaskIds([...runningTaskIdsRef.current]);
+  }, []);
+
+  const appendTerminalLine = useCallback((taskId: string, line: string) => {
+    setTerminalLinesByTask((current) => ({
+      ...current,
+      [taskId]: [...(current[taskId] ?? []), line].slice(-120),
+    }));
+  }, []);
+
+  const notifyBackgroundTask = useCallback(
+    (
+      taskId: string,
+      message: string,
+      kind: RuntimeNotice["kind"],
+    ) => {
+      if (activeTaskRef.current?.id === taskId) return;
+      setAttentionTaskIds((current) =>
+        current.includes(taskId) ? current : [...current, taskId],
+      );
+      showNotice(message, { taskId, kind });
+      void requestTaskAttention().catch(() => undefined);
+    },
+    [showNotice],
   );
 
   const refreshRuntime = useCallback(async () => {
@@ -142,12 +236,10 @@ export function useGrokRuntime(
 
   const updateConnectedTask = useCallback(
     (
+      taskId: string,
       updater: (task: GrokTask) => GrokTask,
       options: { touch?: boolean } = {},
     ) => {
-      const taskId = sessionTaskIdRef.current;
-      if (!taskId) return;
-
       updateTask(taskId, (current) => {
         const next = updater(current);
         if (next === current) return current;
@@ -169,38 +261,43 @@ export function useGrokRuntime(
     let disposed = false;
     const subscriptions = [
       listenDesktopEvent<unknown>("grok://session-update", (payload) => {
-        if (ignoreSessionUpdatesRef.current) return;
-        const update = normalizeSessionUpdate(payload);
+        const scoped = parseTaskScopedEvent<unknown>(payload);
+        if (
+          !scoped ||
+          ignoredSessionTaskIdsRef.current.has(scoped.taskId)
+        ) {
+          return;
+        }
+        const update = normalizeSessionUpdate(scoped.payload);
         if (!update) return;
+        const taskId = scoped.taskId;
 
         const nextPlan = planFromUpdate(update);
         if (nextPlan) {
-          updateConnectedTask((task) => ({ ...task, plan: nextPlan }));
+          updateConnectedTask(taskId, (task) => ({ ...task, plan: nextPlan }));
         }
 
         const nextTool = toolFromUpdate(update);
         if (nextTool) {
-          const taskId = sessionTaskIdRef.current;
-          const taskWorkspace = activeTaskRef.current?.workspacePath ?? workspacePath;
-          if (taskId) {
-            recordAuditEvent({
-              id: `tool:${sessionIdRef.current ?? taskId}:${nextTool.id}`,
-              workspacePath: taskWorkspace,
-              taskId,
-              kind: "tool",
-              title: nextTool.target,
-              detail: nextTool.action,
-              status:
-                nextTool.status === "complete"
-                  ? "succeeded"
-                  : nextTool.status === "failed"
-                    ? "failed"
-                    : nextTool.status === "pending"
-                      ? "pending"
-                      : "running",
-            });
-          }
-          updateConnectedTask((task) => {
+          recordAuditEvent({
+            id: `tool:${
+              sessionsRef.current.get(taskId)?.sessionId ?? taskId
+            }:${nextTool.id}`,
+            workspacePath,
+            taskId,
+            kind: "tool",
+            title: nextTool.target,
+            detail: nextTool.action,
+            status:
+              nextTool.status === "complete"
+                ? "succeeded"
+                : nextTool.status === "failed"
+                  ? "failed"
+                  : nextTool.status === "pending"
+                    ? "pending"
+                    : "running",
+          });
+          updateConnectedTask(taskId, (task) => {
             const index = task.tools.findIndex((item) => item.id === nextTool.id);
             const tools =
               index === -1
@@ -214,7 +311,7 @@ export function useGrokRuntime(
 
         const messageChunk = update.content?.text;
         if (update.sessionUpdate === "agent_message_chunk" && messageChunk) {
-          updateConnectedTask((task) => {
+          updateConnectedTask(taskId, (task) => {
             const last = task.messages.at(-1);
             const messages =
               last?.role === "agent" && last.streaming
@@ -241,8 +338,12 @@ export function useGrokRuntime(
       listenDesktopEvent<ClientRequestPayload>(
         "grok://client-request",
         (payload) => {
-          const rawOptions = Array.isArray(payload.params?.options)
-            ? payload.params.options
+          const scoped = parseTaskScopedEvent<ClientRequestPayload>(payload);
+          if (!scoped || !Number.isFinite(scoped.payload.id)) return;
+          const taskId = scoped.taskId;
+          const request = scoped.payload;
+          const rawOptions = Array.isArray(request.params?.options)
+            ? request.params.options
             : [];
           const options = rawOptions
             .filter(
@@ -259,17 +360,19 @@ export function useGrokRuntime(
               }),
             );
 
-          const taskId = sessionTaskIdRef.current ?? activeTaskRef.current?.id ?? null;
-          const auditEventId = `permission:${sessionIdRef.current ?? taskId ?? "session"}:${payload.id}`;
+          const auditEventId = `permission:${
+            sessionsRef.current.get(taskId)?.sessionId ?? taskId
+          }:${request.id}`;
           const nextPermission: PermissionRequest = {
-            id: payload.id,
+            taskId,
+            id: request.id,
             auditEventId,
             title: String(
-              payload.params?.title ?? "Grok Build needs permission",
+              request.params?.title ?? "Grok Build needs permission",
             ),
             description: String(
-              payload.params?.description ??
-                payload.params?.toolCallTitle ??
+              request.params?.description ??
+                request.params?.toolCallTitle ??
                 "Review this action before Grok Build continues.",
             ),
             options:
@@ -288,28 +391,52 @@ export function useGrokRuntime(
                     },
                   ],
           };
-          setPermission(nextPermission);
+          setPermissionsByTask((current) => ({
+            ...current,
+            [taskId]: nextPermission,
+          }));
           recordAuditEvent({
             id: auditEventId,
-            workspacePath:
-              activeTaskRef.current?.workspacePath ?? workspacePath,
+            workspacePath,
             taskId,
             kind: "permission",
             title: nextPermission.title,
             detail: "Waiting for your decision",
             status: "pending",
           });
+          notifyBackgroundTask(
+            taskId,
+            "A background Grok task needs your permission.",
+            "permission",
+          );
         },
       ),
-      listenDesktopEvent<string>("grok://stderr", (line) => {
-        setTerminalLines((current) => [...current, line].slice(-120));
+      listenDesktopEvent<unknown>("grok://stderr", (payload) => {
+        const scoped = parseTaskScopedEvent<string>(payload);
+        if (scoped && typeof scoped.payload === "string") {
+          appendTerminalLine(scoped.taskId, scoped.payload);
+        }
       }),
       listenDesktopEvent<string>("grok://install-log", (line) => {
-        setTerminalLines((current) => [...current, line].slice(-120));
+        appendTerminalLine(GLOBAL_LOG_KEY, line);
       }),
       listenDesktopEvent<string>("grok://status", (status) =>
         setStatusText(status),
       ),
+      listenDesktopEvent<unknown>("grok://session-status", (payload) => {
+        const scoped = parseTaskScopedEvent<TaskSessionStatus>(payload);
+        if (!scoped) return;
+        if (scoped.payload.state !== "connected") {
+          setTaskSession(scoped.taskId, null);
+        }
+        if (activeTaskRef.current?.id === scoped.taskId) {
+          setStatusText(
+            scoped.payload.state === "connected"
+              ? "Grok Build · ACP connected"
+              : "Grok Build · Session ready to restore",
+          );
+        }
+      }),
     ];
 
     void Promise.all(subscriptions).then((items) => {
@@ -325,7 +452,15 @@ export function useGrokRuntime(
       mounted.current = false;
       unlisteners.forEach((unlisten) => unlisten());
     };
-  }, [recordAuditEvent, refreshRuntime, updateConnectedTask, workspacePath]);
+  }, [
+    appendTerminalLine,
+    notifyBackgroundTask,
+    recordAuditEvent,
+    refreshRuntime,
+    setTaskSession,
+    updateConnectedTask,
+    workspacePath,
+  ]);
 
   const connectTask = useCallback(
     (
@@ -334,26 +469,20 @@ export function useGrokRuntime(
       forceNewSession = false,
     ): Promise<string> => {
       const run = async () => {
-        const currentSessionId = sessionIdRef.current;
-        const currentTaskId = sessionTaskIdRef.current;
-        if (
-          currentSessionId &&
-          currentTaskId === task.id &&
-          !restart &&
-          !forceNewSession
-        ) {
-          return currentSessionId;
-        }
+        const currentSession = sessionsRef.current.get(task.id);
 
         setError(null);
-        setStatusText(
-          task.acpSessionId ? "Restoring Grok Build session…" : "Starting Grok Build ACP…",
-        );
+        if (activeTaskRef.current?.id === task.id) {
+          setStatusText(
+            task.acpSessionId
+              ? "Restoring Grok Build session…"
+              : "Starting Grok Build ACP…",
+          );
+        }
 
         const resumeSessionId = forceNewSession
           ? null
-          : task.acpSessionId ??
-            (restart && currentTaskId === task.id ? currentSessionId : null);
+          : currentSession?.sessionId ?? task.acpSessionId ?? null;
         const taskWorkspace = isWorkspaceSelected(task.workspacePath)
           ? task.workspacePath
           : workspacePath;
@@ -362,25 +491,22 @@ export function useGrokRuntime(
         }
 
         try {
-          if (currentSessionId) {
-            sessionTaskIdRef.current = null;
-            await stopAcpSession();
-            setConnectedSession(null, null);
-            setPromptCapabilities(null);
-            setRuntimeModelState(null);
+          if (currentSession && (restart || forceNewSession)) {
+            await stopAcpSession(task.id);
+            setTaskSession(task.id, null);
           }
 
-          sessionTaskIdRef.current = task.id;
-          ignoreSessionUpdatesRef.current = Boolean(resumeSessionId);
+          if (resumeSessionId) {
+            ignoredSessionTaskIdsRef.current.add(task.id);
+          }
           const session = await startAcpSession(
+            task.id,
             taskWorkspace,
             resumeSessionId,
             task.runtimeProfile,
           );
           const nextSessionId = session.sessionId;
-          setPromptCapabilities(session.promptCapabilities);
-          setRuntimeModelState(session.runtimeModelState);
-          setConnectedSession(nextSessionId, task.id);
+          setTaskSession(task.id, session);
           updateTask(task.id, (current) => {
             const resolvedProfile = session.runtimeProfile;
             if (
@@ -400,39 +526,48 @@ export function useGrokRuntime(
           setRuntime((current) =>
             current ? { ...current, authenticationState: "verified" } : current,
           );
-          setStatusText(
-            resumeSessionId
-              ? "Grok Build · Session restored"
-              : "Grok Build · ACP connected",
-          );
+          if (activeTaskRef.current?.id === task.id) {
+            setStatusText(
+              resumeSessionId
+                ? "Grok Build · Session restored"
+                : "Grok Build · ACP connected",
+            );
+          }
           return nextSessionId;
         } catch (cause) {
-          setConnectedSession(null, null);
-          setPromptCapabilities(null);
-          setRuntimeModelState(null);
+          setTaskSession(task.id, null);
           if (isAuthenticationError(cause)) {
             setRuntime((current) =>
               current ? { ...current, authenticationState: "expired" } : current,
             );
-            setStatusText("Grok Build · Sign in required");
-          } else {
-            setStatusText("Grok Build · ACP connection failed");
+          }
+          if (activeTaskRef.current?.id === task.id) {
+            setStatusText(
+              isAuthenticationError(cause)
+                ? "Grok Build · Sign in required"
+                : "Grok Build · ACP connection failed",
+            );
           }
           setError(String(cause));
           throw cause;
         } finally {
-          ignoreSessionUpdatesRef.current = false;
+          ignoredSessionTaskIdsRef.current.delete(task.id);
         }
       };
 
-      const operation = connectionQueueRef.current.then(run, run);
-      connectionQueueRef.current = operation.then(
-        () => undefined,
-        () => undefined,
+      const queue =
+        connectionQueuesRef.current.get(task.id) ?? Promise.resolve();
+      const operation = queue.then(run, run);
+      connectionQueuesRef.current.set(
+        task.id,
+        operation.then(
+          () => undefined,
+          () => undefined,
+        ),
       );
       return operation;
     },
-    [setConnectedSession, updateTask, workspacePath],
+    [setTaskSession, updateTask, workspacePath],
   );
 
   const connect = useCallback(
@@ -450,7 +585,7 @@ export function useGrokRuntime(
     setError(null);
     try {
       const next = await inspectRuntimeModels();
-      setRuntimeModelState(next);
+      setInspectedRuntimeModelState(next);
       return next;
     } catch (cause) {
       setError(String(cause));
@@ -574,8 +709,11 @@ export function useGrokRuntime(
   }, [activeTask?.id, busy, connectTask, runtime, signingIn]);
 
   useEffect(() => {
-    setPermission(null);
-  }, [activeTask?.id]);
+    if (!activeTaskId) return;
+    setAttentionTaskIds((current) =>
+      current.filter((taskId) => taskId !== activeTaskId),
+    );
+  }, [activeTaskId]);
 
   const runBrowserDemo = useCallback(
     async (taskId: string, prompt: string, attachmentCount: number) => {
@@ -627,7 +765,7 @@ export function useGrokRuntime(
 
       for (const chunk of response) {
         await delay(220);
-        if (turnCancelledRef.current) break;
+        if (cancelledTaskIdsRef.current.has(taskId)) break;
         updateTask(taskId, (task) => ({
           ...task,
           updatedAt: new Date().toISOString(),
@@ -646,7 +784,13 @@ export function useGrokRuntime(
     async (rawText: string, attachments: PromptAttachment[] = []) => {
       const text = rawText.trim();
       const task = activeTaskRef.current;
-      if ((!text && attachments.length === 0) || busy || !task) return;
+      if (
+        (!text && attachments.length === 0) ||
+        !task ||
+        runningTaskIdsRef.current.has(task.id)
+      ) {
+        return;
+      }
 
       const attachmentSummaries = attachments.map(({ data: _data, ...summary }) =>
         summary,
@@ -654,17 +798,20 @@ export function useGrokRuntime(
       const titleSource = text || `Review ${attachmentSummaries[0]?.name ?? "attachments"}`;
 
       const taskId = task.id;
-      turnCancelledRef.current = false;
-      setBusy(true);
+      const taskTitle =
+        task.messages.length === 0 && task.title === NEW_TASK_TITLE
+          ? deriveTaskTitle(titleSource)
+          : task.title;
+      cancelledTaskIdsRef.current.delete(taskId);
+      setTaskRunning(taskId, true);
       setError(null);
       updateTask(taskId, (current) => {
         const firstMessage = current.messages.length === 0;
         return {
           ...current,
-          title:
-            firstMessage && current.title === NEW_TASK_TITLE
-              ? deriveTaskTitle(titleSource)
-              : current.title,
+          title: firstMessage && current.title === NEW_TASK_TITLE
+            ? taskTitle
+            : current.title,
           updatedAt: new Date().toISOString(),
           status: "running",
           messages: [
@@ -688,25 +835,26 @@ export function useGrokRuntime(
       try {
         await connectTask(task);
         if (isDesktopRuntime()) {
-          await sendAcpPrompt(text, attachments);
+          await sendAcpPrompt(taskId, text, attachments);
         } else {
           await runBrowserDemo(taskId, text, attachments.length);
         }
         succeeded = true;
       } catch (cause) {
-        setError(String(cause));
-        setTerminalLines((current) =>
-          [...current, `[error] ${String(cause)}`].slice(-120),
-        );
+        if (activeTaskRef.current?.id === taskId) {
+          setError(String(cause));
+        }
+        appendTerminalLine(taskId, `[error] ${String(cause)}`);
         if (isDesktopRuntime()) {
-          await stopAcpSession().catch(() => undefined);
-          setConnectedSession(null, null);
-          setPromptCapabilities(null);
-          setRuntimeModelState(null);
-          setStatusText("Grok Build · Ready to retry");
+          await stopAcpSession(taskId).catch(() => undefined);
+          setTaskSession(taskId, null);
+          if (activeTaskRef.current?.id === taskId) {
+            setStatusText("Grok Build · Ready to retry");
+          }
         }
       } finally {
-        const cancelled = turnCancelledRef.current;
+        const cancelled = cancelledTaskIdsRef.current.has(taskId);
+        cancelledTaskIdsRef.current.delete(taskId);
         updateTask(taskId, (current) => ({
           ...current,
           updatedAt: new Date().toISOString(),
@@ -716,10 +864,27 @@ export function useGrokRuntime(
             streaming: false,
           })),
         }));
-        setBusy(false);
+        setTaskRunning(taskId, false);
+        if (!cancelled) {
+          notifyBackgroundTask(
+            taskId,
+            succeeded
+              ? `“${taskTitle}” finished in the background.`
+              : `“${taskTitle}” needs attention.`,
+            succeeded ? "success" : "error",
+          );
+        }
       }
     },
-    [busy, connectTask, runBrowserDemo, setConnectedSession, updateTask],
+    [
+      appendTerminalLine,
+      connectTask,
+      notifyBackgroundTask,
+      runBrowserDemo,
+      setTaskRunning,
+      setTaskSession,
+      updateTask,
+    ],
   );
 
   const retry = useCallback(async () => {
@@ -742,27 +907,16 @@ export function useGrokRuntime(
   }, [send]);
 
   const cancel = useCallback(async () => {
-    const taskId = sessionTaskIdRef.current;
-    turnCancelledRef.current = true;
+    const taskId = activeTaskRef.current?.id;
+    if (!taskId || !runningTaskIdsRef.current.has(taskId)) return;
+    cancelledTaskIdsRef.current.add(taskId);
     try {
-      await cancelAcpTurn();
+      await cancelAcpTurn(taskId);
       setStatusText("Grok Build · Turn cancelled");
     } catch (cause) {
       setError(String(cause));
-    } finally {
-      if (taskId) {
-        updateTask(taskId, (task) => ({
-          ...task,
-          status: "idle",
-          updatedAt: new Date().toISOString(),
-          messages: task.messages.map((entry) => ({
-            ...entry,
-            streaming: false,
-          })),
-        }));
-      }
     }
-  }, [updateTask]);
+  }, []);
 
   const installRuntime = useCallback(async () => {
     if (installing) return;
@@ -770,10 +924,13 @@ export function useGrokRuntime(
     setError(null);
     setStatusText("Installing official Grok Runtime…");
     if (!isDesktopRuntime()) {
-      setTerminalLines((current) => [
+      setTerminalLinesByTask((current) => ({
         ...current,
+        [GLOBAL_LOG_KEY]: [
+          ...(current[GLOBAL_LOG_KEY] ?? []),
         "[preview] Simulating the official Grok Runtime installer. No software is changed.",
-      ]);
+        ].slice(-120),
+      }));
     }
 
     try {
@@ -796,8 +953,12 @@ export function useGrokRuntime(
     setError(null);
     setNotice(null);
     try {
+      const task = activeTaskRef.current;
+      if (!task) {
+        throw new Error("Create a task before refreshing account information.");
+      }
       await connect();
-      const next = await fetchGrokSubscription();
+      const next = await fetchGrokSubscription(task.id);
       setSubscription(next);
       setStatusText("Grok Build · Account refreshed");
       showNotice(
@@ -817,6 +978,12 @@ export function useGrokRuntime(
 
   const signIn = useCallback(async () => {
     if (signingIn) return;
+    if (anyBusy || hasAnyPermission) {
+      const message =
+        "Wait for background tasks and permission requests before starting OAuth.";
+      setError(message);
+      throw new Error(message);
+    }
     setSigningIn(true);
     setSubscriptionLoading(false);
     setSubscription(null);
@@ -856,9 +1023,16 @@ export function useGrokRuntime(
 
       try {
         // A fresh ACP process must read the credentials written by this OAuth attempt.
+        await stopAcpSession();
+        sessionsRef.current.clear();
+        setSessionsByTask({});
+        const task = activeTaskRef.current;
+        if (!task) {
+          throw new Error("Create a task before verifying the refreshed account.");
+        }
         await connect(true);
         setSubscriptionLoading(true);
-        const nextSubscription = await fetchGrokSubscription();
+        const nextSubscription = await fetchGrokSubscription(task.id);
         setSubscription(nextSubscription);
         setStatusText("Grok Build · Signed in and verified");
         showNotice(
@@ -868,10 +1042,10 @@ export function useGrokRuntime(
             : "Grok sign-in succeeded and account information was refreshed.",
         );
         if (!isDesktopRuntime()) {
-          setTerminalLines((current) => [
-            ...current,
+          appendTerminalLine(
+            GLOBAL_LOG_KEY,
             "[preview] OAuth completion was simulated. No account was accessed or changed.",
-          ]);
+          );
         }
       } catch (refreshCause) {
         setStatusText("Grok Build · OAuth configured");
@@ -891,7 +1065,15 @@ export function useGrokRuntime(
       setSubscriptionLoading(false);
       setSigningIn(false);
     }
-  }, [connect, showNotice, signingIn, workspacePath]);
+  }, [
+    anyBusy,
+    appendTerminalLine,
+    connect,
+    hasAnyPermission,
+    showNotice,
+    signingIn,
+    workspacePath,
+  ]);
 
   useEffect(() => {
     const authenticationReady =
@@ -934,24 +1116,33 @@ export function useGrokRuntime(
           (/reject|deny/i.test(option.kind ?? "") || /deny|reject/i.test(option.name)),
       );
       try {
-        await answerClientRequest(permission.id, result);
+        await answerClientRequest(permission.taskId, permission.id, result);
         recordAuditEvent({
           id: permission.auditEventId,
           workspacePath:
-            activeTaskRef.current?.workspacePath ?? workspacePath,
-          taskId: activeTaskRef.current?.id ?? null,
+            activeTaskRef.current?.id === permission.taskId
+              ? activeTaskRef.current.workspacePath
+              : workspacePath,
+          taskId: permission.taskId,
           kind: "permission",
           title: permission.title,
           detail: option?.name ?? "Dismissed without selecting an option",
           status: option ? (rejected ? "denied" : "allowed") : "cancelled",
         });
-        setPermission(null);
+        setPermissionsByTask((current) => {
+          if (current[permission.taskId]?.id !== permission.id) return current;
+          const next = { ...current };
+          delete next[permission.taskId];
+          return next;
+        });
       } catch (cause) {
         recordAuditEvent({
           id: permission.auditEventId,
           workspacePath:
-            activeTaskRef.current?.workspacePath ?? workspacePath,
-          taskId: activeTaskRef.current?.id ?? null,
+            activeTaskRef.current?.id === permission.taskId
+              ? activeTaskRef.current.workspacePath
+              : workspacePath,
+          taskId: permission.taskId,
           kind: "permission",
           title: permission.title,
           detail: "The decision could not be delivered to the Runtime",
@@ -964,21 +1155,75 @@ export function useGrokRuntime(
     [permission, recordAuditEvent, workspacePath],
   );
 
-  const disconnect = useCallback(async () => {
+  const disconnectTask = useCallback(async (taskId: string) => {
+    if (runningTaskIdsRef.current.has(taskId)) {
+      throw new Error(
+        "Wait for this Grok task to finish or cancel it before disconnecting.",
+      );
+    }
     const stop = async () => {
-      await stopAcpSession();
-      setConnectedSession(null, null);
-      setPromptCapabilities(null);
-      setRuntimeModelState(null);
-      setStatusText("Grok Build · OAuth verified");
+      await stopAcpSession(taskId);
+      setTaskSession(taskId, null);
+      if (activeTaskRef.current?.id === taskId) {
+        setStatusText("Grok Build · OAuth verified");
+      }
     };
-    const operation = connectionQueueRef.current.then(stop, stop);
-    connectionQueueRef.current = operation.then(
+    const queue =
+      connectionQueuesRef.current.get(taskId) ?? Promise.resolve();
+    const operation = queue.then(stop, stop);
+    const settled = operation.then(
       () => undefined,
       () => undefined,
     );
-    await operation;
-  }, [setConnectedSession]);
+    connectionQueuesRef.current.set(taskId, settled);
+    try {
+      await operation;
+    } catch (cause) {
+      setError(String(cause));
+      throw cause;
+    } finally {
+      if (connectionQueuesRef.current.get(taskId) === settled) {
+        connectionQueuesRef.current.delete(taskId);
+      }
+    }
+  }, [setTaskSession]);
+
+  const disconnectAll = useCallback(async () => {
+    if (runningTaskIdsRef.current.size > 0) {
+      throw new Error(
+        "Wait for all Grok tasks to finish or cancel them before switching workspaces.",
+      );
+    }
+    try {
+      await Promise.allSettled(connectionQueuesRef.current.values());
+      await stopAcpSession();
+      sessionsRef.current.clear();
+      connectionQueuesRef.current.clear();
+      ignoredSessionTaskIdsRef.current.clear();
+      setSessionsByTask({});
+      setPermissionsByTask({});
+      setStatusText("Grok Build · OAuth verified");
+    } catch (cause) {
+      setError(String(cause));
+      throw cause;
+    }
+  }, []);
+
+  const disconnect = useCallback(async () => {
+    const taskId = activeTaskRef.current?.id;
+    if (!taskId) return;
+    await disconnectTask(taskId);
+  }, [disconnectTask]);
+
+  const clearTerminal = useCallback(() => {
+    const taskId = activeTaskRef.current?.id;
+    setTerminalLinesByTask((current) => {
+      const next = { ...current };
+      delete next[GLOBAL_LOG_KEY];
+      if (taskId) delete next[taskId];
+      return next;
+    });
+  }, []);
 
   return {
     runtime,
@@ -992,6 +1237,13 @@ export function useGrokRuntime(
     terminalLines,
     permission,
     busy,
+    anyBusy,
+    hasAnyPermission,
+    runningTaskIds,
+    runningCount: runningTaskIds.length,
+    runningInBackground,
+    pendingPermissionTaskIds,
+    attentionTaskIds,
     installing,
     signingIn,
     subscriptionLoading,
@@ -1004,6 +1256,8 @@ export function useGrokRuntime(
     dismissNotice: () => setNotice(null),
     connect,
     disconnect,
+    disconnectTask,
+    disconnectAll,
     send,
     retry,
     cancel,
@@ -1015,7 +1269,7 @@ export function useGrokRuntime(
     configureRuntimeProfile,
     answerPermission,
     refreshRuntime,
-    clearTerminal: () => setTerminalLines([]),
+    clearTerminal,
     dismissError: () => setError(null),
   };
 }

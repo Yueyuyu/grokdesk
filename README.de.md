@@ -55,6 +55,7 @@ Der Agent bleibt die offizielle Grok Build CLI. GrokDesk verbessert die Desktop-
 | Funktion | Aktuelles Verhalten |
 | --- | --- |
 | Echte ACP-Sitzungen | Startet den offiziellen Prozess `grok agent stdio` und unterstützt `session/new`, `session/load`, Streaming, Abbruch und Berechtigungen |
+| ACP-Aufgaben im Hintergrund | Hält bis zu vier aufgabenbezogene offizielle Runtime-Clients. Der Start wird serialisiert, um den Initialisierungsstillstand der aktuellen CLI bei gleichzeitigen Starts zu vermeiden; danach laufen initialisierte Aufgaben parallel. Wechseln oder Erstellen von Aufgaben unterbricht die Ausgabe nicht, und Meldungen zu Abschluss, Fehlern oder Berechtigungen öffnen die richtige Aufgabe |
 | Optimierte Antworten | Rendert GFM-Markdown sicher: Überschriften, Listen, Aufgabenlisten, Links, Tabellen, Zitate, Inline-Code und kopierbare Codeblöcke |
 | Ruhiges Lesen | Der Antwortbereich scrollt unabhängig. Nach manuellem Hochscrollen zieht Streaming nicht nach unten; „Back to latest“ aktiviert die Verfolgung erneut |
 | Fixiertes Tools-Dock | Tools bleiben direkt über dem Eingabefeld, zeigen standardmäßig die letzten fünf Einträge und lassen sich vollständig aufklappen |

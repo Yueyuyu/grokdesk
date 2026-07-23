@@ -326,6 +326,7 @@ export interface PermissionOption {
 }
 
 export interface PermissionRequest {
+  taskId: string;
   id: number;
   auditEventId: string;
   title: string;

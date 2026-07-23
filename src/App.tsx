@@ -109,12 +109,17 @@ export function App() {
     taskStore.activeTaskId,
     auditStore.recordEvent,
   );
-  const workspace = useWorkspaceChanges(workspacePath, grok.busy || terminal.running);
+  const workspace = useWorkspaceChanges(
+    workspacePath,
+    grok.anyBusy || terminal.running,
+  );
   const searchableTasks = useMemo(
     () => [...taskStore.tasks, ...taskStore.archivedTasks],
     [taskStore.archivedTasks, taskStore.tasks],
   );
   const setupStep = getRuntimeSetupStep(grok.runtime);
+  const workspaceSwitchBlocked =
+    terminal.running || grok.anyBusy || grok.hasAnyPermission;
 
   useEffect(() => {
     const apply = () =>
@@ -160,10 +165,14 @@ export function App() {
   }, [workspacePath]);
 
   const pickWorkspace = async () => {
-    if (terminal.running || grok.busy || grok.permission) return;
+    if (workspaceSwitchBlocked) return;
     const selected = await chooseWorkspace();
     if (!selected) return;
-    if (grok.sessionId) await grok.disconnect();
+    try {
+      await grok.disconnectAll();
+    } catch {
+      return;
+    }
     setWorkspacePath(selected);
     localStorage.setItem("grokdesk.workspace", selected);
   };
@@ -189,17 +198,18 @@ export function App() {
           onNavigate={setActiveNavigation}
           workspaceLabel={workspaceLabel}
           onChooseWorkspace={() => void pickWorkspace()}
-          workspaceSwitchDisabled={terminal.running || grok.busy || Boolean(grok.permission)}
+          workspaceSwitchDisabled={workspaceSwitchBlocked}
           runtime={grok.runtime}
           statusText={grok.statusText}
           onStatusClick={() => setActiveNavigation("settings")}
           tasks={taskStore.tasks}
           archivedTasks={taskStore.archivedTasks}
           activeTaskId={taskStore.activeTaskId}
-          pendingPermissionCount={auditStore.pendingCount}
-          taskSwitchDisabled={
-            grok.busy || Boolean(grok.permission) || !workspaceReady
-          }
+          pendingPermissionCount={grok.pendingPermissionTaskIds.length}
+          runningTaskIds={grok.runningTaskIds}
+          pendingPermissionTaskIds={grok.pendingPermissionTaskIds}
+          attentionTaskIds={grok.attentionTaskIds}
+          taskSwitchDisabled={!workspaceReady}
           onCreateTask={() => {
             taskStore.createTask();
             setActiveNavigation("tasks");
@@ -210,14 +220,17 @@ export function App() {
           }}
           onRenameTask={taskStore.renameTask}
           onBranchTask={(taskId) => {
+            if (grok.runningTaskIds.includes(taskId)) return;
             taskStore.branchTask(taskId);
             setActiveNavigation("tasks");
           }}
           onArchiveTask={async (taskId) => {
-            if (taskId === taskStore.activeTaskId && grok.sessionId) {
-              await grok.disconnect();
+            try {
+              await grok.disconnectTask(taskId);
+              taskStore.archiveTask(taskId);
+            } catch {
+              // The Runtime hook surfaces the actionable error toast.
             }
-            taskStore.archiveTask(taskId);
           }}
           onRestoreTask={(taskId) => {
             taskStore.restoreTask(taskId);
@@ -230,13 +243,12 @@ export function App() {
             setActiveNavigation("tasks");
           }}
           onExportTask={async (taskId) => {
+            if (grok.runningTaskIds.includes(taskId)) return;
             const exported = taskStore.exportTask(taskId);
             await writeTaskExchangeFile(exported.title, exported.content);
           }}
           onDeleteTask={async (taskId) => {
-            if (taskId === taskStore.activeTaskId && grok.sessionId) {
-              await grok.disconnect();
-            }
+            await grok.disconnectTask(taskId);
             taskStore.deleteTask(taskId);
           }}
         />
@@ -252,6 +264,7 @@ export function App() {
             <TaskWorkspace
               task={taskStore.activeTask}
               busy={grok.busy}
+              runningInBackground={grok.runningInBackground}
               onSend={grok.send}
               onCancel={grok.cancel}
               onRetry={grok.retry}
@@ -286,7 +299,9 @@ export function App() {
             tasks={searchableTasks}
             workspaceReady={workspaceReady}
             preview={preview}
-            clearDisabled={Boolean(grok.permission) || grok.busy || terminal.running}
+            clearDisabled={
+              grok.hasAnyPermission || grok.anyBusy || terminal.running
+            }
             onClear={auditStore.clear}
             onChooseWorkspace={() => void pickWorkspace()}
           />
@@ -323,7 +338,7 @@ export function App() {
             onThemeChange={setTheme}
             workspacePath={workspacePath}
             onChooseWorkspace={() => void pickWorkspace()}
-            workspaceSwitchDisabled={terminal.running || grok.busy || Boolean(grok.permission)}
+            workspaceSwitchDisabled={workspaceSwitchBlocked}
             runtime={grok.runtime}
             subscription={grok.subscription}
             connected={Boolean(grok.sessionId)}
@@ -404,14 +419,40 @@ export function App() {
         </div>
       ) : null}
       {grok.notice ? (
-        <div className="status-toast" role="status" aria-live="polite">
-          <span>{grok.notice}</span>
+        <div
+          className={`status-toast status-toast--${grok.notice.kind}`}
+          role={grok.notice.kind === "error" ? "alert" : "status"}
+          aria-live="polite"
+        >
+          <span>{grok.notice.message}</span>
+          {grok.notice.taskId &&
+          grok.notice.taskId !== taskStore.activeTaskId ? (
+            <button
+              type="button"
+              className="status-toast__open"
+              onClick={() => {
+                const taskId = grok.notice?.taskId;
+                if (!taskId) return;
+                if (
+                  taskStore.archivedTasks.some((task) => task.id === taskId)
+                ) {
+                  taskStore.restoreTask(taskId);
+                } else {
+                  taskStore.selectTask(taskId);
+                }
+                setActiveNavigation("tasks");
+                grok.dismissNotice();
+              }}
+            >
+              Open task
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={grok.dismissNotice}
             aria-label="Close notification"
           >
-            ×
+            <X size={13} />
           </button>
         </div>
       ) : null}
@@ -426,7 +467,7 @@ export function App() {
         tasks={searchableTasks}
         activeTaskId={taskStore.activeTaskId}
         activeNavigation={activeNavigation}
-        taskSwitchDisabled={grok.busy || !workspaceReady}
+        taskSwitchDisabled={!workspaceReady}
         workspaceReady={workspaceReady}
         inspectorCollapsed={inspectorCollapsed}
         onClose={() => setCommandPaletteOpen(false)}

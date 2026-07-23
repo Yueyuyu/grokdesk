@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
     process::Stdio,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
     time::Duration,
@@ -29,17 +29,32 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MAX_ATTACHMENTS: usize = 8;
 const MAX_ATTACHMENT_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_TOTAL_ATTACHMENT_BYTES: u64 = 24 * 1024 * 1024;
+const MAX_ACP_CLIENTS: usize = 4;
 
 type PendingResponse = oneshot::Sender<Result<Value, String>>;
+type AcpClients = Arc<Mutex<HashMap<String, Arc<AcpClient>>>>;
 
 #[derive(Default)]
 pub struct GrokBridge {
-    child: Arc<Mutex<Option<Child>>>,
-    stdin: Arc<Mutex<Option<ChildStdin>>>,
-    pending: Arc<Mutex<HashMap<u64, PendingResponse>>>,
-    session_id: Arc<Mutex<Option<String>>>,
-    prompt_capabilities: Arc<Mutex<PromptCapabilities>>,
+    clients: AcpClients,
+    start_lock: Mutex<()>,
+    access_clock: AtomicU64,
+}
+
+#[derive(Default)]
+struct AcpClient {
+    child: Mutex<Option<Child>>,
+    stdin: Mutex<Option<ChildStdin>>,
+    pending: Mutex<HashMap<u64, PendingResponse>>,
+    session_id: Mutex<Option<String>>,
+    prompt_capabilities: Mutex<PromptCapabilities>,
+    runtime_model_state: Mutex<Option<RuntimeModelState>>,
+    runtime_profile: Mutex<Option<RuntimeLaunchProfile>>,
     next_id: AtomicU64,
+    last_used: AtomicU64,
+    active_requests: AtomicUsize,
+    turn_active: AtomicBool,
+    closing: AtomicBool,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -600,7 +615,7 @@ fn prompt_content(
     Ok(content)
 }
 
-impl GrokBridge {
+impl AcpClient {
     async fn write_message(&self, message: &Value) -> Result<(), String> {
         let serialized = serde_json::to_string(message).map_err(|error| error.to_string())?;
         let mut stdin = self.stdin.lock().await;
@@ -654,10 +669,71 @@ impl GrokBridge {
         .await
     }
 
+    fn begin_request(&self) -> Result<(), String> {
+        if self.closing.load(Ordering::Acquire) {
+            return Err("The selected Grok Build ACP session is closing.".to_string());
+        }
+        self.active_requests.fetch_add(1, Ordering::AcqRel);
+        if self.closing.load(Ordering::Acquire) {
+            self.active_requests.fetch_sub(1, Ordering::AcqRel);
+            return Err("The selected Grok Build ACP session is closing.".to_string());
+        }
+        Ok(())
+    }
+
+    fn finish_request(&self) {
+        self.active_requests.fetch_sub(1, Ordering::AcqRel);
+    }
+
+    fn begin_turn(&self) -> Result<(), String> {
+        if self.turn_active.swap(true, Ordering::AcqRel) {
+            return Err("This Grok task already has a running turn.".to_string());
+        }
+        if let Err(error) = self.begin_request() {
+            self.turn_active.store(false, Ordering::Release);
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn finish_turn(&self) {
+        self.turn_active.store(false, Ordering::Release);
+        self.finish_request();
+    }
+
+    async fn session_info(&self) -> Result<AcpSessionInfo, String> {
+        let session_id = self
+            .session_id
+            .lock()
+            .await
+            .clone()
+            .ok_or_else(|| "The selected Grok Build ACP session is not ready.".to_string())?;
+        let runtime_profile =
+            self.runtime_profile.lock().await.clone().ok_or_else(|| {
+                "The selected Grok Build Runtime profile is not ready.".to_string()
+            })?;
+        Ok(AcpSessionInfo {
+            session_id,
+            prompt_capabilities: self.prompt_capabilities.lock().await.clone(),
+            runtime_model_state: self.runtime_model_state.lock().await.clone(),
+            runtime_profile,
+        })
+    }
+
+    async fn fail_pending(&self, message: &str) {
+        let mut pending = self.pending.lock().await;
+        for (_, sender) in pending.drain() {
+            let _ = sender.send(Err(message.to_string()));
+        }
+    }
+
     async fn stop(&self) -> Result<(), String> {
+        self.closing.store(true, Ordering::Release);
         self.stdin.lock().await.take();
         self.session_id.lock().await.take();
         *self.prompt_capabilities.lock().await = PromptCapabilities::default();
+        self.runtime_model_state.lock().await.take();
+        self.runtime_profile.lock().await.take();
 
         if let Some(mut child) = self.child.lock().await.take() {
             child
@@ -667,23 +743,123 @@ impl GrokBridge {
             let _ = child.wait().await;
         }
 
-        let mut pending = self.pending.lock().await;
-        for (_, sender) in pending.drain() {
-            let _ = sender.send(Err("Grok Build ACP stopped.".to_string()));
+        self.fail_pending("Grok Build ACP stopped.").await;
+        Ok(())
+    }
+}
+
+impl GrokBridge {
+    fn touch(&self, client: &AcpClient) {
+        let access = self.access_clock.fetch_add(1, Ordering::Relaxed) + 1;
+        client.last_used.store(access, Ordering::Relaxed);
+    }
+
+    async fn client(&self, task_id: &str) -> Result<Arc<AcpClient>, String> {
+        let client = self
+            .clients
+            .lock()
+            .await
+            .get(task_id)
+            .cloned()
+            .ok_or_else(|| "Start this task's ACP session before continuing.".to_string())?;
+        self.touch(&client);
+        Ok(client)
+    }
+
+    async fn stop_task(&self, task_id: &str) -> Result<(), String> {
+        let client = {
+            let mut clients = self.clients.lock().await;
+            let client = clients.remove(task_id);
+            if let Some(client) = client.as_ref() {
+                client.closing.store(true, Ordering::Release);
+            }
+            client
+        };
+        if let Some(client) = client {
+            client.stop().await?;
+        }
+        Ok(())
+    }
+
+    async fn stop_all(&self) -> Result<(), String> {
+        let clients = {
+            let mut clients = self.clients.lock().await;
+            let clients = clients
+                .drain()
+                .map(|(_, client)| client)
+                .collect::<Vec<_>>();
+            for client in &clients {
+                client.closing.store(true, Ordering::Release);
+            }
+            clients
+        };
+        for client in clients {
+            client.stop().await?;
+        }
+        Ok(())
+    }
+
+    async fn prepare_slot(&self, app: &AppHandle) -> Result<(), String> {
+        let eviction = {
+            let mut clients = self.clients.lock().await;
+            if clients.len() < MAX_ACP_CLIENTS {
+                return Ok(());
+            }
+            let candidate = clients
+                .iter()
+                .filter(|(_, client)| {
+                    client.active_requests.load(Ordering::Acquire) == 0
+                        && !client.closing.load(Ordering::Acquire)
+                })
+                .min_by_key(|(_, client)| client.last_used.load(Ordering::Relaxed))
+                .map(|(task_id, client)| (task_id.clone(), client.clone()));
+            let Some((task_id, client)) = candidate else {
+                return Err(format!(
+                    "GrokDesk supports up to {MAX_ACP_CLIENTS} concurrent background tasks. Wait for one to finish before starting another."
+                ));
+            };
+            client.closing.store(true, Ordering::Release);
+            clients.remove(&task_id);
+            Some((task_id, client))
+        };
+
+        if let Some((task_id, client)) = eviction {
+            emit_task_event(
+                app,
+                "grok://session-status",
+                &task_id,
+                json!({
+                    "state": "evicted",
+                    "message": "An idle ACP process was released. Its official session can be restored when the task is opened again."
+                }),
+            );
+            client.stop().await?;
         }
         Ok(())
     }
 }
 
+fn emit_task_event<T: Serialize>(app: &AppHandle, event: &str, task_id: &str, payload: T) {
+    let _ = app.emit(
+        event,
+        json!({
+            "taskId": task_id,
+            "payload": payload
+        }),
+    );
+}
+
 async fn stdout_reader(
+    task_id: String,
     stdout: tokio::process::ChildStdout,
-    pending: Arc<Mutex<HashMap<u64, PendingResponse>>>,
+    client: Arc<AcpClient>,
+    clients: AcpClients,
     app: AppHandle,
 ) {
     let mut lines = BufReader::new(stdout).lines();
     while let Ok(Some(line)) = lines.next_line().await {
         let Ok(message) = serde_json::from_str::<Value>(&line) else {
-            let _ = app.emit("grok://stderr", format!("[ACP] {line}"));
+            emit_task_event(&app, "grok://stderr", &task_id, format!("[ACP] {line}"));
             continue;
         };
 
@@ -692,7 +868,7 @@ async fn stdout_reader(
 
         if method.is_none() {
             if let Some(id) = id {
-                if let Some(sender) = pending.lock().await.remove(&id) {
+                if let Some(sender) = client.pending.lock().await.remove(&id) {
                     let response = if let Some(error) = message.get("error") {
                         Err(error.to_string())
                     } else {
@@ -706,8 +882,10 @@ async fn stdout_reader(
 
         let method = method.expect("checked above");
         if let Some(id) = id {
-            let _ = app.emit(
+            emit_task_event(
+                &app,
                 "grok://client-request",
+                &task_id,
                 json!({
                     "id": id,
                     "method": method,
@@ -715,22 +893,45 @@ async fn stdout_reader(
                 }),
             );
         } else if method == "session/update" || method == "x.ai/session/update" {
-            let _ = app.emit(
+            emit_task_event(
+                &app,
                 "grok://session-update",
+                &task_id,
                 message.get("params").cloned().unwrap_or(Value::Null),
             );
         } else {
-            let _ = app.emit("grok://extension", message);
+            emit_task_event(&app, "grok://extension", &task_id, message);
         }
     }
 
-    let _ = app.emit("grok://status", "Grok Build · ACP disconnected");
+    client
+        .fail_pending("Grok Build ACP disconnected before completing the request.")
+        .await;
+    let mut clients = clients.lock().await;
+    let current_matches = clients
+        .get(&task_id)
+        .is_some_and(|current| Arc::ptr_eq(current, &client));
+    if current_matches {
+        clients.remove(&task_id);
+    }
+    drop(clients);
+    if current_matches {
+        emit_task_event(
+            &app,
+            "grok://session-status",
+            &task_id,
+            json!({
+                "state": "disconnected",
+                "message": "Grok Build ACP disconnected."
+            }),
+        );
+    }
 }
 
-async fn stderr_reader(stderr: tokio::process::ChildStderr, app: AppHandle) {
+async fn stderr_reader(task_id: String, stderr: tokio::process::ChildStderr, app: AppHandle) {
     let mut lines = BufReader::new(stderr).lines();
     while let Ok(Some(line)) = lines.next_line().await {
-        let _ = app.emit("grok://stderr", line);
+        emit_task_event(&app, "grok://stderr", &task_id, line);
     }
 }
 
@@ -758,8 +959,23 @@ fn session_start_request(
     }
 }
 
+fn validate_task_id(task_id: String) -> Result<String, String> {
+    let task_id = task_id.trim();
+    let valid = !task_id.is_empty()
+        && task_id.len() <= 200
+        && task_id.chars().enumerate().all(|(index, character)| {
+            character.is_ascii_alphanumeric()
+                || (index > 0 && matches!(character, '-' | '_' | '.' | ':'))
+        });
+    if !valid {
+        return Err("The selected task identifier is not valid.".to_string());
+    }
+    Ok(task_id.to_string())
+}
+
 #[tauri::command]
 pub async fn start_acp_session(
+    task_id: String,
     cwd: String,
     resume_session_id: Option<String>,
     model_id: Option<String>,
@@ -767,27 +983,36 @@ pub async fn start_acp_session(
     app: AppHandle,
     bridge: State<'_, GrokBridge>,
 ) -> Result<AcpSessionInfo, String> {
+    let task_id = validate_task_id(task_id)?;
     let model_id = validate_runtime_launch_value(model_id, "model", 120, true)?;
     let reasoning_effort =
         validate_runtime_launch_value(reasoning_effort, "reasoning effort", 40, false)?;
     let resume_session_id = resume_session_id.filter(|session_id| !session_id.trim().is_empty());
-    if let Some(session_id) = bridge.session_id.lock().await.clone() {
-        if resume_session_id.as_deref() == Some(session_id.as_str()) {
-            return Ok(AcpSessionInfo {
-                session_id,
-                prompt_capabilities: bridge.prompt_capabilities.lock().await.clone(),
-                runtime_model_state: None,
-                runtime_profile: RuntimeLaunchProfile {
-                    model_id,
-                    reasoning_effort,
-                },
-            });
+    // The official Runtime can keep multiple clients alive, but concurrent
+    // process initialization can stall. Serialize startup while allowing
+    // already initialized task clients to run concurrently.
+    let _start_guard = bridge.start_lock.lock().await;
+
+    let existing = bridge.clients.lock().await.get(&task_id).cloned();
+    if let Some(existing) = existing {
+        let current_session_id = existing.session_id.lock().await.clone();
+        if current_session_id.as_deref() == resume_session_id.as_deref()
+            && current_session_id.is_some()
+        {
+            bridge.touch(&existing);
+            return existing.session_info().await;
         }
+        if existing.active_requests.load(Ordering::Acquire) > 0 {
+            return Err(
+                "Wait for this task's current Runtime request before reconnecting it.".to_string(),
+            );
+        }
+        bridge.stop_task(&task_id).await?;
     }
 
     let executable = grok_executable()?;
     let workspace = canonical_workspace(&cwd)?;
-    bridge.stop().await?;
+    bridge.prepare_slot(&app).await?;
 
     let mut command = Command::new(executable);
     command.args(["agent", "--no-leader"]);
@@ -823,12 +1048,25 @@ pub async fn start_acp_session(
         .take()
         .ok_or_else(|| "Grok Build ACP did not expose stderr.".to_string())?;
 
-    *bridge.stdin.lock().await = Some(stdin);
-    *bridge.child.lock().await = Some(child);
-    tokio::spawn(stdout_reader(stdout, bridge.pending.clone(), app.clone()));
-    tokio::spawn(stderr_reader(stderr, app.clone()));
+    let client = Arc::new(AcpClient::default());
+    *client.stdin.lock().await = Some(stdin);
+    *client.child.lock().await = Some(child);
+    bridge.touch(&client);
+    bridge
+        .clients
+        .lock()
+        .await
+        .insert(task_id.clone(), client.clone());
+    tokio::spawn(stdout_reader(
+        task_id.clone(),
+        stdout,
+        client.clone(),
+        bridge.clients.clone(),
+        app.clone(),
+    ));
+    tokio::spawn(stderr_reader(task_id.clone(), stderr, app.clone()));
 
-    let initialize = bridge
+    let initialize = client
         .request(
             "initialize",
             json!({
@@ -858,7 +1096,7 @@ pub async fn start_acp_session(
     let initialize = match initialize {
         Ok(initialize) => initialize,
         Err(error) => {
-            let _ = bridge.stop().await;
+            let _ = bridge.stop_task(&task_id).await;
             return Err(error);
         }
     };
@@ -869,7 +1107,7 @@ pub async fn start_acp_session(
             .as_ref()
             .map(|state| state.current_model_id.as_str());
         if resolved_model != Some(requested_model) {
-            let _ = bridge.stop().await;
+            let _ = bridge.stop_task(&task_id).await;
             return Err(format!(
                 "The official Grok Runtime did not activate model `{requested_model}`."
             ));
@@ -890,34 +1128,43 @@ pub async fn start_acp_session(
                 .and_then(|state| state.current_reasoning_effort.clone())
         }),
     };
-    *bridge.prompt_capabilities.lock().await = prompt_capabilities.clone();
+    *client.prompt_capabilities.lock().await = prompt_capabilities.clone();
+    *client.runtime_model_state.lock().await = runtime_model_state.clone();
+    *client.runtime_profile.lock().await = Some(runtime_profile.clone());
 
     let (session_method, session_params) =
         session_start_request(&workspace, resume_session_id.as_deref());
 
-    let session = bridge
+    let session = client
         .request(session_method, session_params, Duration::from_secs(60))
         .await;
 
     let session = match session {
         Ok(session) => session,
         Err(error) => {
-            let _ = bridge.stop().await;
+            let _ = bridge.stop_task(&task_id).await;
             return Err(error);
         }
     };
     let session_id = if let Some(session_id) = resume_session_id {
         session_id
+    } else if let Some(session_id) = session.get("sessionId").and_then(Value::as_str) {
+        session_id.to_string()
     } else {
-        session
-            .get("sessionId")
-            .and_then(Value::as_str)
-            .ok_or_else(|| "Grok Build ACP did not return a sessionId.".to_string())?
-            .to_string()
+        let _ = bridge.stop_task(&task_id).await;
+        return Err("Grok Build ACP did not return a sessionId.".to_string());
     };
 
-    *bridge.session_id.lock().await = Some(session_id.clone());
-    let _ = app.emit("grok://status", "Grok Build · ACP connected");
+    *client.session_id.lock().await = Some(session_id.clone());
+    emit_task_event(
+        &app,
+        "grok://session-status",
+        &task_id,
+        json!({
+            "state": "connected",
+            "message": "Grok Build ACP connected."
+        }),
+    );
     Ok(AcpSessionInfo {
         session_id,
         prompt_capabilities,
@@ -928,60 +1175,82 @@ pub async fn start_acp_session(
 
 #[tauri::command]
 pub async fn send_acp_prompt(
+    task_id: String,
     text: String,
     attachments: Vec<PromptAttachment>,
     app: AppHandle,
     bridge: State<'_, GrokBridge>,
 ) -> Result<(), String> {
-    let session_id = bridge
-        .session_id
-        .lock()
-        .await
-        .clone()
-        .ok_or_else(|| "Start an ACP session before sending a prompt.".to_string())?;
-    let capabilities = bridge.prompt_capabilities.lock().await.clone();
-    let prompt = prompt_content(text, attachments, &capabilities)?;
+    let task_id = validate_task_id(task_id)?;
+    let client = bridge.client(&task_id).await?;
+    client.begin_turn()?;
 
-    let response = bridge
-        .request(
-            "session/prompt",
-            json!({
-                "sessionId": session_id,
-                "prompt": prompt
-            }),
-            Duration::from_secs(6 * 60 * 60),
-        )
-        .await?;
+    let response = async {
+        let session_id = client
+            .session_id
+            .lock()
+            .await
+            .clone()
+            .ok_or_else(|| "Start an ACP session before sending a prompt.".to_string())?;
+        let capabilities = client.prompt_capabilities.lock().await.clone();
+        let prompt = prompt_content(text, attachments, &capabilities)?;
+        client
+            .request(
+                "session/prompt",
+                json!({
+                    "sessionId": session_id,
+                    "prompt": prompt
+                }),
+                Duration::from_secs(6 * 60 * 60),
+            )
+            .await
+    }
+    .await;
+    client.finish_turn();
+    let response = response?;
 
-    let _ = app.emit("grok://turn-complete", response);
+    emit_task_event(&app, "grok://turn-complete", &task_id, response);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn cancel_acp_turn(bridge: State<'_, GrokBridge>) -> Result<(), String> {
-    let session_id = bridge
+pub async fn cancel_acp_turn(task_id: String, bridge: State<'_, GrokBridge>) -> Result<(), String> {
+    let task_id = validate_task_id(task_id)?;
+    let client = bridge.client(&task_id).await?;
+    let session_id = client
         .session_id
         .lock()
         .await
         .clone()
         .ok_or_else(|| "No active ACP session.".to_string())?;
-    bridge
+    client
         .notify("session/cancel", json!({ "sessionId": session_id }))
         .await
 }
 
 #[tauri::command]
-pub async fn stop_acp_session(bridge: State<'_, GrokBridge>) -> Result<(), String> {
-    bridge.stop().await
+pub async fn stop_acp_session(
+    task_id: Option<String>,
+    bridge: State<'_, GrokBridge>,
+) -> Result<(), String> {
+    if let Some(task_id) = task_id {
+        bridge.stop_task(&validate_task_id(task_id)?).await
+    } else {
+        bridge.stop_all().await
+    }
 }
 
 #[tauri::command]
 pub async fn respond_to_client_request(
+    task_id: String,
     id: u64,
     result: Value,
     bridge: State<'_, GrokBridge>,
 ) -> Result<(), String> {
+    let task_id = validate_task_id(task_id)?;
     bridge
+        .client(&task_id)
+        .await?
         .write_message(&json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -1154,16 +1423,18 @@ pub async fn install_grok_cli(app: AppHandle) -> Result<RuntimeStatus, String> {
 
 #[tauri::command]
 pub async fn fetch_grok_subscription(
+    task_id: String,
     bridge: State<'_, GrokBridge>,
 ) -> Result<GrokSubscription, String> {
-    if bridge.session_id.lock().await.is_none() {
-        return Err("Connect the official Grok ACP session before checking billing.".to_string());
-    }
+    let task_id = validate_task_id(task_id)?;
+    let client = bridge.client(&task_id).await?;
+    client.begin_request()?;
 
-    match bridge
+    let result = client
         .request("x.ai/billing", json!({}), Duration::from_secs(30))
-        .await
-    {
+        .await;
+    client.finish_request();
+    match result {
         Ok(billing) => Ok(subscription_from_billing(&billing)),
         Err(error) if billing_method_unavailable(&error) => Ok(unsupported_subscription()),
         Err(error) => Err(error),
@@ -1377,6 +1648,33 @@ mod tests {
         assert_eq!(method, "session/new");
         assert_eq!(params["cwd"], "C:/work/app");
         assert!(params.get("sessionId").is_none());
+    }
+
+    #[test]
+    fn validates_task_routing_keys_before_using_the_client_map() {
+        assert_eq!(
+            validate_task_id("task-123:branch_1".to_string()).as_deref(),
+            Ok("task-123:branch_1")
+        );
+        assert!(validate_task_id("--task".to_string()).is_err());
+        assert!(validate_task_id("task id".to_string()).is_err());
+        assert!(validate_task_id("x".repeat(201)).is_err());
+    }
+
+    #[test]
+    fn active_turns_reserve_the_client_from_idle_eviction() {
+        let client = AcpClient::default();
+
+        client
+            .begin_turn()
+            .expect("a new client should accept its first turn");
+        assert!(client.turn_active.load(Ordering::Acquire));
+        assert_eq!(client.active_requests.load(Ordering::Acquire), 1);
+        assert!(client.begin_turn().is_err());
+
+        client.finish_turn();
+        assert!(!client.turn_active.load(Ordering::Acquire));
+        assert_eq!(client.active_requests.load(Ordering::Acquire), 0);
     }
 
     #[test]
