@@ -9,7 +9,7 @@ import {
 
 const report = (statuses: DiagnosticReport["checks"][number]["status"][]) =>
   ({
-    appVersion: "0.2.4",
+    appVersion: "0.2.5",
     platform: "windows / x86_64",
     runtimeVersion: "grok 0.2.93",
     workspaceSelected: true,

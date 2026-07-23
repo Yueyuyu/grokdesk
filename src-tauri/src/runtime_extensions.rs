@@ -214,7 +214,7 @@ fn validate_cli_value(value: &str, label: &str, maximum_length: usize) -> Result
     Ok(value.to_string())
 }
 
-fn parse_cli_json(output: &str, label: &str) -> Result<Value, String> {
+pub(crate) fn parse_cli_json(output: &str, label: &str) -> Result<Value, String> {
     serde_json::from_str(output)
         .map_err(|error| format!("Official Grok CLI returned invalid {label} data: {error}"))
 }
@@ -230,7 +230,7 @@ fn compact_cli_error(stderr: &[u8]) -> String {
         .collect()
 }
 
-async fn run_grok_cli(
+pub(crate) async fn run_grok_cli(
     cwd: Option<&str>,
     args: &[String],
     wait_for: Duration,

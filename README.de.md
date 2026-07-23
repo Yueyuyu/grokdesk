@@ -64,6 +64,7 @@ Der Agent bleibt die offizielle Grok Build CLI. GrokDesk verbessert die Desktop-
 | Hintergrund-Terminals und Testergebnisse | Führt bis zu acht unabhängige Terminal-Tabs parallel aus; Tabs können erstellt, umbenannt, geschlossen und einzeln gestoppt werden, während reale Vitest-, Cargo-, Jest- und Node-Ausgaben in Erfolgs-, Fehler- und Zeitangaben umgewandelt werden |
 | Runtime und Anmeldung | Ein-Klick-Installation der offiziellen Grok Runtime und Anmeldung über `grok login --oauth` |
 | Plugins und MCP | Liest und verwaltet reale Plugin-, Marketplace- und MCP-Daten der offiziellen Runtime |
+| Runtime-Kontext und Skills | Liest Projektanweisungen, Skills, Agents und Konfigurationsebenen für den aktuellen Workspace über das offizielle `grok inspect --json` und kombiniert sie mit den vom aktiven ACP gemeldeten Fähigkeiten; unterstützt Aktualisierung und ausdrückliches ACP-Neuverbinden, ohne simulierte Browser-Daten |
 | Lokaler Aufgabenverlauf | Speichert Aufgaben, Nachrichten, Pläne, Tools und ACP Session IDs pro Workspace; Anhangsinhalte werden nicht gespeichert |
 | Aufgabenlebenszyklus | Archiviert und stellt Aufgaben wieder her, erstellt lokale Zweige mit neuer ACP Session und importiert/exportiert ausdrücklich streng validiertes JSON bis 8 MiB – ohne Zugangsdaten oder Anhangsinhalte |
 | Befehlspalette und aufgabenübergreifende Suche | `Ctrl+K` durchsucht aktive und archivierte Aufgaben im aktuellen Workspace nach Titeln, Unterhaltungen, Anhangsnamen, Plänen und Tools oder führt Navigations-, Aufgaben-, Workspace- und Inspector-Befehle aus |
@@ -155,6 +156,7 @@ Pakete werden unter `src-tauri/target/release/bundle/` erzeugt.
 - Die Befehlspalette durchsucht nur lokale Aufgaben im aktuellen Workspace; Suchbegriffe und Ergebnisse werden nicht an externe Dienste übertragen.
 - Der Berechtigungs- und Ausführungsverlauf bleibt lokal und Workspace-gebunden und ist auf 30 Tage sowie 500 Einträge begrenzt. Terminalausgaben, Prompts, Antworten, Anhangsinhalte, OAuth-Token und MCP-Header werden nicht gespeichert; sensible Befehlsargumente werden vor dem Speichern maskiert.
 - Diagnoseberichte enthalten nur Versionen, Plattformdaten, aggregierte Zähler und kontrollierte Statustexte. Absolute Pfade, Konto-IDs, Prompts, Antworten, Terminalausgaben, Anhänge, OAuth-Zugangsdaten sowie MCP-Namen, Endpunkte und Header werden ausgeschlossen oder maskiert.
+- Der Context Inspector zeigt nur eine sichere Projektion der offiziellen Runtime-Ausgabe; Zugangsdatenwerte, absolute Quellpfade sowie MCP-Namen, Endpunkte und Header gelangen nicht in die Frontend-Daten.
 - Das Zurücksetzen einer Datei erfordert immer eine Bestätigung; es gibt kein automatisches Massen-Rollback.
 - Rohes HTML ist in Markdown deaktiviert; externe Links verwenden ein isoliertes neues Fenster.
 
@@ -165,6 +167,7 @@ Pakete werden unter `src-tauri/target/release/bundle/` erzeugt.
 - Anhänge hängen letztlich von den ACP-Fähigkeiten der installierten offiziellen Runtime ab.
 - Abonnement und Kontingent hängen von der Billing-Methode der offiziellen CLI ab.
 - Das Terminal führt derzeit nicht interaktive PowerShell-Befehle statt einer vollständigen PTY/TTY-Sitzung aus.
+- Skills sind im Context Inspector derzeit schreibgeschützt. Die offizielle CLI liefert die Erkennung, aber keinen eigenständigen Verwaltungsbefehl; Installation und Updates erfolgen daher über das zugehörige Plugin.
 - Geräteübergreifende Synchronisierung bleibt geplant.
 
 ## Mitwirken

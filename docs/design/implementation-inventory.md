@@ -76,6 +76,7 @@
 - `Ctrl+K` command palette for local cross-task search, navigation, task creation, workspace selection, and inspector commands.
 - Local permission and execution audit for redacted permission decisions, Grok tool lifecycles, and workspace-command outcomes, with filtering, search, retention disclosure, and confirmed clearing.
 - Native diagnostics for GrokDesk, Runtime, OAuth, ACP, workspace/Git, and Runtime-reported MCP state, with direct recovery actions and a sanitized Markdown support report. Browser previews never invent checks.
+- Runtime Context inspection backed by official `grok inspect --json`, with project instructions, read-only Skills, aggregate Runtime composition, active ACP prompt capabilities, refresh, and explicit reconnect. Credential values, absolute source paths, MCP names/endpoints/headers, and simulated browser context remain excluded.
 - Resizable left and right panes plus inspector collapse.
 - Changes, Terminal, Tests, and Context tabs.
 - Up to eight independent workspace-terminal tabs with per-tab draft, history, output, background state, rename/close controls, and process-tree cancellation.

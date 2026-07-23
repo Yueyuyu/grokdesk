@@ -1,5 +1,6 @@
 mod diagnostics;
 mod grok_bridge;
+mod runtime_context;
 mod runtime_extensions;
 mod task_exchange;
 mod workspace;
@@ -13,6 +14,7 @@ use grok_bridge::{
     probe_runtime, respond_to_client_request, send_acp_prompt, start_acp_session,
     start_oauth_login, stop_acp_session, GrokBridge,
 };
+use runtime_context::inspect_grok_context;
 use runtime_extensions::{
     add_grok_mcp_server, diagnose_grok_mcp_server, install_grok_plugin, list_grok_mcp_servers,
     list_grok_plugins, refresh_grok_plugin_marketplaces, remove_grok_mcp_server,
@@ -48,6 +50,7 @@ pub fn run() {
             stop_acp_session,
             start_oauth_login,
             install_grok_cli,
+            inspect_grok_context,
             list_grok_plugins,
             install_grok_plugin,
             set_grok_plugin_enabled,

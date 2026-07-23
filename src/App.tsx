@@ -355,13 +355,18 @@ export function App() {
               onClearTerminal={grok.clearTerminal}
               terminal={terminal}
               preview={preview}
+              runtimeAvailable={grok.runtime?.available === true}
+              connected={Boolean(grok.sessionId)}
+              contextBusy={grok.busy || Boolean(grok.permission)}
+              promptCapabilities={grok.promptCapabilities}
               onCollapse={() => setInspectorCollapsed(true)}
-              sessionId={grok.sessionId}
               task={taskStore.activeTask}
               workspacePath={workspacePath}
               workspaceReady={workspaceReady}
               workspace={workspace}
               onChooseWorkspace={() => void pickWorkspace()}
+              onOpenSettings={() => setActiveNavigation("settings")}
+              onReconnect={() => grok.connect(true)}
             />
           </>
         ) : (

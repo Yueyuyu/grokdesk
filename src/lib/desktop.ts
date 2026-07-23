@@ -12,6 +12,7 @@ import type {
   McpScope,
   PromptAttachment,
   RuntimeCommandResult,
+  RuntimeContextSnapshot,
   RuntimeStatus,
   WorkspaceCommandResult,
   WorkspaceDiff,
@@ -78,6 +79,15 @@ export async function runDiagnostics(
     cwd: runtimeWorkspace(cwd),
     acpConnected,
   });
+}
+
+export async function inspectGrokContext(
+  cwd: string,
+): Promise<RuntimeContextSnapshot> {
+  if (!isDesktopRuntime()) {
+    desktopOnlyRuntimeFeature("Runtime context inspection");
+  }
+  return invoke<RuntimeContextSnapshot>("inspect_grok_context", { cwd });
 }
 
 export async function writeDiagnosticReportFile(

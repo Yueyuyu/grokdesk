@@ -139,6 +139,42 @@ export interface PromptCapabilities {
   embeddedContext: boolean;
 }
 
+export interface RuntimeProjectInstruction {
+  path: string;
+  scope: string;
+  fileType: string;
+  sizeBytes: number;
+  approxTokens: number;
+}
+
+export interface RuntimeSkillSummary {
+  name: string;
+  description: string | null;
+  sourceType: string;
+  userInvocable: boolean;
+}
+
+export interface RuntimeContextCounts {
+  agents: number;
+  hooks: number;
+  plugins: number;
+  mcpServers: number;
+  lspServers: number;
+  configLayers: number;
+  permissionSources: number;
+  permissionRulesLoaded: number;
+  permissionRulesSkipped: number;
+}
+
+export interface RuntimeContextSnapshot {
+  grokVersion: string;
+  channel: string;
+  projectTrusted: boolean | null;
+  projectInstructions: RuntimeProjectInstruction[];
+  skills: RuntimeSkillSummary[];
+  counts: RuntimeContextCounts;
+}
+
 export interface AcpSessionInfo {
   sessionId: string;
   promptCapabilities: PromptCapabilities;
