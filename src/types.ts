@@ -139,6 +139,33 @@ export interface PromptCapabilities {
   embeddedContext: boolean;
 }
 
+export interface RuntimeReasoningEffort {
+  id: string;
+  value: string;
+  label: string;
+  description: string | null;
+  default: boolean;
+}
+
+export interface RuntimeModelSummary {
+  modelId: string;
+  name: string;
+  description: string | null;
+  totalContextTokens: number | null;
+  reasoningEfforts: RuntimeReasoningEffort[];
+}
+
+export interface RuntimeModelState {
+  currentModelId: string;
+  currentReasoningEffort: string | null;
+  availableModels: RuntimeModelSummary[];
+}
+
+export interface RuntimeLaunchProfile {
+  modelId: string | null;
+  reasoningEffort: string | null;
+}
+
 export interface RuntimeProjectInstruction {
   path: string;
   scope: string;
@@ -178,6 +205,8 @@ export interface RuntimeContextSnapshot {
 export interface AcpSessionInfo {
   sessionId: string;
   promptCapabilities: PromptCapabilities;
+  runtimeModelState: RuntimeModelState | null;
+  runtimeProfile: RuntimeLaunchProfile;
 }
 
 /**
@@ -237,6 +266,7 @@ export interface GrokTask {
   origin: TaskOrigin;
   sourceTaskId: string | null;
   acpSessionId: string | null;
+  runtimeProfile: RuntimeLaunchProfile;
   messages: ChatEntry[];
   plan: PlanStep[];
   tools: ToolActivity[];

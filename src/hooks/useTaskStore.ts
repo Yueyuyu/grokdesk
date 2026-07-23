@@ -17,6 +17,7 @@ import {
   type TaskStoreSnapshot,
 } from "../lib/tasks";
 import { parseTaskImport, serializeTaskExport } from "../lib/taskExchange";
+import { loadDefaultRuntimeProfile } from "../lib/runtimeProfile";
 import { isWorkspaceSelected } from "../lib/workspace";
 import type { GrokTask } from "../types";
 
@@ -35,7 +36,9 @@ const loadSnapshot = (workspacePath: string) => {
         );
 
   if (!isWorkspaceSelected(workspacePath)) return stored;
-  return ensureWorkspaceTask(stored, workspacePath);
+  return ensureWorkspaceTask(stored, workspacePath, {
+    runtimeProfile: loadDefaultRuntimeProfile(),
+  });
 };
 
 const persistSnapshot = (snapshot: TaskStoreSnapshot) => {
@@ -56,7 +59,11 @@ export function useTaskStore(workspacePath: string) {
 
   useEffect(() => {
     if (!workspaceSelected) return;
-    setSnapshot((current) => ensureWorkspaceTask(current, workspacePath));
+    setSnapshot((current) =>
+      ensureWorkspaceTask(current, workspacePath, {
+        runtimeProfile: loadDefaultRuntimeProfile(),
+      }),
+    );
   }, [workspacePath, workspaceSelected]);
 
   useEffect(() => {
@@ -105,7 +112,9 @@ export function useTaskStore(workspacePath: string) {
 
   const createTask = useCallback(() => {
     if (!workspaceSelected) return null;
-    const task = createGrokTask(workspacePath);
+    const task = createGrokTask(workspacePath, {
+      runtimeProfile: loadDefaultRuntimeProfile(),
+    });
     setSnapshot((current) => ({
       ...current,
       tasks: [task, ...current.tasks].slice(0, MAX_TASKS),

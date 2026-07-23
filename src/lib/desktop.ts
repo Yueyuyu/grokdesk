@@ -13,6 +13,8 @@ import type {
   PromptAttachment,
   RuntimeCommandResult,
   RuntimeContextSnapshot,
+  RuntimeLaunchProfile,
+  RuntimeModelState,
   RuntimeStatus,
   WorkspaceCommandResult,
   WorkspaceDiff,
@@ -90,6 +92,13 @@ export async function inspectGrokContext(
   return invoke<RuntimeContextSnapshot>("inspect_grok_context", { cwd });
 }
 
+export async function inspectRuntimeModels(): Promise<RuntimeModelState> {
+  if (!isDesktopRuntime()) {
+    desktopOnlyRuntimeFeature("Runtime model inspection");
+  }
+  return invoke<RuntimeModelState>("inspect_runtime_models");
+}
+
 export async function writeDiagnosticReportFile(
   content: string,
 ): Promise<boolean> {
@@ -112,6 +121,10 @@ export async function writeDiagnosticReportFile(
 export async function startAcpSession(
   cwd: string,
   resumeSessionId: string | null = null,
+  runtimeProfile: RuntimeLaunchProfile = {
+    modelId: null,
+    reasoningEffort: null,
+  },
 ): Promise<AcpSessionInfo> {
   if (!isDesktopRuntime()) {
     return {
@@ -127,9 +140,16 @@ export async function startAcpSession(
         audio: false,
         embeddedContext: true,
       },
+      runtimeModelState: null,
+      runtimeProfile,
     };
   }
-  return invoke<AcpSessionInfo>("start_acp_session", { cwd, resumeSessionId });
+  return invoke<AcpSessionInfo>("start_acp_session", {
+    cwd,
+    resumeSessionId,
+    modelId: runtimeProfile.modelId,
+    reasoningEffort: runtimeProfile.reasoningEffort,
+  });
 }
 
 export async function sendAcpPrompt(

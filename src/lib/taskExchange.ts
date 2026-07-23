@@ -5,6 +5,7 @@ import type {
   PlanStep,
   ToolActivity,
 } from "../types";
+import { parseRuntimeProfile } from "./runtimeProfile";
 
 export const TASK_EXPORT_SCHEMA = "grokdesk.task-export";
 export const TASK_EXPORT_VERSION = 1;
@@ -21,7 +22,10 @@ interface TaskExportEnvelope {
   version: typeof TASK_EXPORT_VERSION;
   exportedAt: string;
   sourceWorkspacePath: string;
-  task: Pick<GrokTask, "title" | "messages" | "plan" | "tools">;
+  task: Pick<
+    GrokTask,
+    "title" | "runtimeProfile" | "messages" | "plan" | "tools"
+  >;
 }
 
 const planStatuses = new Set<PlanStep["status"]>([
@@ -211,6 +215,7 @@ export function serializeTaskExport(
     sourceWorkspacePath: task.workspacePath,
     task: {
       title: task.title,
+      runtimeProfile: parseRuntimeProfile(task.runtimeProfile),
       messages: task.messages.map((message) => ({
         id: message.id,
         role: message.role,
@@ -348,6 +353,7 @@ export function parseTaskImport(
     origin: "import",
     sourceTaskId: null,
     acpSessionId: null,
+    runtimeProfile: parseRuntimeProfile(exportedTask.runtimeProfile),
     messages,
     plan,
     tools,

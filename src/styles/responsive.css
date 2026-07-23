@@ -566,6 +566,18 @@
     grid-column: 1 / -1;
   }
 
+  .model-settings__form {
+    grid-template-columns: 1fr;
+  }
+
+  .model-settings--empty {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .model-settings--empty .secondary-button {
+    grid-column: 1 / -1;
+  }
+
   .onboarding-panel {
     padding: 14px 10px;
   }

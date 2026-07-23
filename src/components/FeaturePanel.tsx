@@ -9,7 +9,14 @@ import {
 } from "@phosphor-icons/react";
 import { formatCreditUsage, getAuthenticationLabel } from "../lib/runtime";
 import { isWorkspaceSelected } from "../lib/workspace";
-import type { GrokSubscription, RuntimeStatus, ThemePreference } from "../types";
+import type {
+  GrokSubscription,
+  RuntimeLaunchProfile,
+  RuntimeModelState,
+  RuntimeStatus,
+  ThemePreference,
+} from "../types";
+import { RuntimeModelSettings } from "./RuntimeModelSettings";
 
 interface FeaturePanelProps {
   theme: ThemePreference;
@@ -23,6 +30,13 @@ interface FeaturePanelProps {
   installing: boolean;
   signingIn: boolean;
   subscriptionLoading: boolean;
+  modelConfiguring: boolean;
+  modelCatalogLoading: boolean;
+  modelChangeDisabled: boolean;
+  runtimeModelState: RuntimeModelState | null;
+  runtimeProfile: RuntimeLaunchProfile | null;
+  defaultRuntimeProfile: RuntimeLaunchProfile;
+  taskHasConversation: boolean;
   preview: boolean;
   onConnect: () => Promise<unknown>;
   onDisconnect: () => Promise<void>;
@@ -30,6 +44,10 @@ interface FeaturePanelProps {
   onSignIn: () => Promise<void>;
   onVerifySubscription: () => Promise<unknown>;
   onManageSubscription: () => Promise<void>;
+  onConfigureRuntimeProfile: (
+    profile: RuntimeLaunchProfile,
+  ) => Promise<void>;
+  onRefreshRuntimeModels: () => Promise<unknown>;
 }
 
 function formatPeriodEnd(value: string | null | undefined) {
@@ -51,6 +69,13 @@ export function FeaturePanel({
   installing,
   signingIn,
   subscriptionLoading,
+  modelConfiguring,
+  modelCatalogLoading,
+  modelChangeDisabled,
+  runtimeModelState,
+  runtimeProfile,
+  defaultRuntimeProfile,
+  taskHasConversation,
   preview,
   onConnect,
   onDisconnect,
@@ -58,6 +83,8 @@ export function FeaturePanel({
   onSignIn,
   onVerifySubscription,
   onManageSubscription,
+  onConfigureRuntimeProfile,
+  onRefreshRuntimeModels,
 }: FeaturePanelProps) {
   const authenticationState = connected
     ? "verified"
@@ -81,12 +108,14 @@ export function FeaturePanel({
   const periodEnd = subscriptionUnavailable
     ? subscriptionPlaceholder
     : formatPeriodEnd(subscription?.periodEnd);
+  const canApplyModelToCurrent =
+    canVerifyAccount && workspaceReady && !taskHasConversation;
 
   return (
     <main className="feature-panel feature-panel--settings">
       <header className="feature-panel__header">
         <div><h1>Settings</h1><p>Runtime、Grok 账号、订阅与界面偏好。</p></div>
-        <span className="version-chip">GrokDesk v0.2.5</span>
+        <span className="version-chip">GrokDesk v0.2.6</span>
       </header>
 
       {preview ? (
@@ -154,6 +183,24 @@ export function FeaturePanel({
             </button>
           </div>
         </div>
+      </section>
+
+      <section className="settings-section">
+        <h2>Model & reasoning</h2>
+        <RuntimeModelSettings
+          preview={preview}
+          runtimeAvailable={runtime?.available === true}
+          canApplyToCurrent={canApplyModelToCurrent}
+          taskHasConversation={taskHasConversation}
+          loading={modelCatalogLoading}
+          configuring={modelConfiguring}
+          disabled={modelChangeDisabled}
+          modelState={runtimeModelState}
+          runtimeProfile={runtimeProfile}
+          defaultRuntimeProfile={defaultRuntimeProfile}
+          onConfigure={onConfigureRuntimeProfile}
+          onRefresh={onRefreshRuntimeModels}
+        />
       </section>
 
       <section className="settings-section">

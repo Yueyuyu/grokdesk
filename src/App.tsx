@@ -330,6 +330,17 @@ export function App() {
             installing={grok.installing}
             signingIn={grok.signingIn}
             subscriptionLoading={grok.subscriptionLoading}
+            modelConfiguring={grok.modelConfiguring}
+            modelCatalogLoading={grok.modelCatalogLoading}
+            modelChangeDisabled={
+              grok.busy || Boolean(grok.permission) || grok.signingIn
+            }
+            runtimeModelState={grok.runtimeModelState}
+            runtimeProfile={taskStore.activeTask?.runtimeProfile ?? null}
+            defaultRuntimeProfile={grok.defaultRuntimeProfile}
+            taskHasConversation={
+              (taskStore.activeTask?.messages.length ?? 0) > 0
+            }
             preview={preview}
             onConnect={grok.connect}
             onDisconnect={grok.disconnect}
@@ -337,6 +348,8 @@ export function App() {
             onSignIn={grok.signIn}
             onVerifySubscription={grok.verifySubscription}
             onManageSubscription={grok.manageSubscription}
+            onConfigureRuntimeProfile={grok.configureRuntimeProfile}
+            onRefreshRuntimeModels={grok.refreshRuntimeModels}
           />
         )}
 

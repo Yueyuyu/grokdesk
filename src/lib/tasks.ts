@@ -7,6 +7,7 @@ import type {
   TaskStatus,
   ToolActivity,
 } from "../types";
+import { parseRuntimeProfile } from "./runtimeProfile";
 
 export const TASK_STORE_KEY = "grokdesk.tasks.v2";
 export const LEGACY_TASK_STORE_KEY = "grokdesk.tasks.v1";
@@ -209,6 +210,7 @@ const parseTask = (value: unknown): GrokTask | null => {
       typeof candidate.acpSessionId === "string" && candidate.acpSessionId
         ? candidate.acpSessionId.slice(0, 200)
         : null,
+    runtimeProfile: parseRuntimeProfile(candidate.runtimeProfile),
     messages: Array.isArray(candidate.messages)
       ? candidate.messages
           .slice(-MAX_MESSAGES_PER_TASK)
@@ -292,7 +294,11 @@ export function workspaceStorageKey(workspacePath: string) {
 
 export function createTask(
   workspacePath: string,
-  options: { id?: string; now?: Date } = {},
+  options: {
+    id?: string;
+    now?: Date;
+    runtimeProfile?: GrokTask["runtimeProfile"];
+  } = {},
 ): GrokTask {
   const timestamp = (options.now ?? new Date()).toISOString();
   return {
@@ -306,6 +312,7 @@ export function createTask(
     origin: "created",
     sourceTaskId: null,
     acpSessionId: null,
+    runtimeProfile: parseRuntimeProfile(options.runtimeProfile),
     messages: [],
     plan: [],
     tools: [],
@@ -394,7 +401,11 @@ export function deleteTask(
 export function ensureWorkspaceTask(
   snapshot: TaskStoreSnapshot,
   workspacePath: string,
-  options: { id?: string; now?: Date } = {},
+  options: {
+    id?: string;
+    now?: Date;
+    runtimeProfile?: GrokTask["runtimeProfile"];
+  } = {},
 ) {
   const key = workspaceStorageKey(workspacePath);
   const workspaceTasks = snapshot.tasks

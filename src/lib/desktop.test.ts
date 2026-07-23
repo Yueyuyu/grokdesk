@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cancelWorkspaceCommand,
+  inspectRuntimeModels,
   runDiagnostics,
   runWorkspaceCommand,
   writeDiagnosticReportFile,
@@ -30,6 +31,14 @@ describe("diagnostics browser boundary", () => {
   it("does not export a report without native diagnostic data", async () => {
     await expect(writeDiagnosticReportFile("# report")).rejects.toThrow(
       "Diagnostic report export is available only",
+    );
+  });
+});
+
+describe("runtime model browser boundary", () => {
+  it("never fabricates an official model catalog in browser preview", async () => {
+    await expect(inspectRuntimeModels()).rejects.toThrow(
+      "Runtime model inspection is available only",
     );
   });
 });

@@ -65,6 +65,7 @@ The agent itself remains the official Grok Build CLI. GrokDesk focuses on the de
 | Runtime and sign-in | One-click installation of the official Grok Runtime and authentication through `grok login --oauth` |
 | Plugins and MCP | Reads and manages real Plugin, Marketplace, and MCP state exposed by the official Runtime |
 | Runtime context and Skills | Reads project instructions, Skills, Agents, and configuration layers for the current workspace through official `grok inspect --json`, then combines capabilities reported by the active ACP session; supports refresh and explicit ACP reconnect, with no simulated browser records |
+| Model and reasoning profiles | Shows models, context windows, and reasoning efforts only from official ACP initialization metadata, then launches tasks through the official `--model` and `--reasoning-effort` arguments; tasks with saved conversation are never restarted silently |
 | Local task history | Stores tasks, messages, plans, tools, and ACP session IDs per workspace; attachment contents are never stored |
 | Task lifecycle | Archives and restores tasks, creates local branches with a fresh ACP session, and explicitly imports/exports strictly validated JSON up to 8 MiB without credentials or attachment bodies |
 | Command palette and cross-task search | Press `Ctrl+K` to search active and archived tasks in the current workspace across titles, conversations, attachment names, plans, and tools, or run navigation, task, workspace, and inspector commands |
@@ -157,6 +158,7 @@ Bundles are written to `src-tauri/target/release/bundle/`.
 - Permission and execution history stays local and workspace-scoped, with a 30-day and 500-record limit. Terminal output, prompts, responses, attachment bodies, OAuth tokens, and MCP headers are excluded, while sensitive command arguments are redacted before persistence.
 - Diagnostic reports contain only versions, platform details, aggregate counts, and controlled status text. Absolute paths, account identifiers, prompts, responses, terminal output, attachments, OAuth credentials, and MCP names, endpoints, or headers are excluded or redacted.
 - The Context inspector exposes only a safe projection of official Runtime output; credential values, absolute source paths, and MCP names, endpoints, or headers never enter frontend data.
+- Model profiles persist only validated model IDs and reasoning-effort identifiers. The catalog comes from the official Runtime, browser previews never fabricate it, and no account credentials are read or stored.
 - File revert always requires confirmation; there is no automatic bulk rollback.
 - Raw HTML is disabled in Markdown, and external links use isolated new-window behavior.
 

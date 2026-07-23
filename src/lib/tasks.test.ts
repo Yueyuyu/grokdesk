@@ -256,6 +256,10 @@ describe("task presentation", () => {
       }),
       title: "Portable review",
       acpSessionId: "session-must-not-export",
+      runtimeProfile: {
+        modelId: "grok-4.5",
+        reasoningEffort: "medium",
+      },
       messages: [
         {
           id: "message-1",
@@ -291,6 +295,10 @@ describe("task presentation", () => {
       origin: "import",
       acpSessionId: null,
       archivedAt: null,
+      runtimeProfile: {
+        modelId: "grok-4.5",
+        reasoningEffort: "medium",
+      },
     });
     expect(imported.messages[0].attachments?.[0]).toEqual({
       name: "context.md",

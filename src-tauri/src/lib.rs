@@ -2,6 +2,7 @@ mod diagnostics;
 mod grok_bridge;
 mod runtime_context;
 mod runtime_extensions;
+mod runtime_models;
 mod task_exchange;
 mod workspace;
 mod workspace_terminal;
@@ -20,6 +21,7 @@ use runtime_extensions::{
     list_grok_plugins, refresh_grok_plugin_marketplaces, remove_grok_mcp_server,
     set_grok_plugin_enabled, uninstall_grok_plugin, update_grok_plugin,
 };
+use runtime_models::inspect_runtime_models;
 use task_exchange::{read_task_exchange_file, write_task_exchange_file};
 use workspace::{
     discard_workspace_change, get_workspace_diff, inspect_workspace, stage_workspace_change,
@@ -44,6 +46,7 @@ pub fn run() {
             run_diagnostics,
             write_diagnostic_report,
             probe_runtime,
+            inspect_runtime_models,
             start_acp_session,
             send_acp_prompt,
             cancel_acp_turn,

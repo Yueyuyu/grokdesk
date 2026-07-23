@@ -6,6 +6,7 @@ import {
   cancelAcpTurn,
   fetchGrokSubscription,
   installGrokCli,
+  inspectRuntimeModels,
   isDesktopRuntime,
   launchOAuth,
   listenDesktopEvent,
@@ -16,6 +17,10 @@ import {
   stopAcpSession,
 } from "../lib/desktop";
 import { deriveTaskTitle, NEW_TASK_TITLE } from "../lib/tasks";
+import {
+  loadDefaultRuntimeProfile,
+  saveDefaultRuntimeProfile,
+} from "../lib/runtimeProfile";
 import { isWorkspaceSelected } from "../lib/workspace";
 import type { UpdateTask } from "./useTaskStore";
 import type {
@@ -27,6 +32,8 @@ import type {
   PromptAttachment,
   PromptCapabilities,
   RuntimeStatus,
+  RuntimeLaunchProfile,
+  RuntimeModelState,
   ToolActivity,
 } from "../types";
 
@@ -78,12 +85,18 @@ export function useGrokRuntime(
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [promptCapabilities, setPromptCapabilities] =
     useState<PromptCapabilities | null>(null);
+  const [runtimeModelState, setRuntimeModelState] =
+    useState<RuntimeModelState | null>(null);
+  const [defaultRuntimeProfile, setDefaultRuntimeProfile] =
+    useState<RuntimeLaunchProfile>(loadDefaultRuntimeProfile);
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const [permission, setPermission] = useState<PermissionRequest | null>(null);
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [modelCatalogLoading, setModelCatalogLoading] = useState(false);
+  const [modelConfiguring, setModelConfiguring] = useState(false);
   const [subscription, setSubscription] = useState<GrokSubscription | null>(null);
   const [statusText, setStatusText] = useState("Inspecting Grok Build…");
   const [error, setError] = useState<string | null>(null);
@@ -315,11 +328,20 @@ export function useGrokRuntime(
   }, [recordAuditEvent, refreshRuntime, updateConnectedTask, workspacePath]);
 
   const connectTask = useCallback(
-    (task: GrokTask, restart = false): Promise<string> => {
+    (
+      task: GrokTask,
+      restart = false,
+      forceNewSession = false,
+    ): Promise<string> => {
       const run = async () => {
         const currentSessionId = sessionIdRef.current;
         const currentTaskId = sessionTaskIdRef.current;
-        if (currentSessionId && currentTaskId === task.id && !restart) {
+        if (
+          currentSessionId &&
+          currentTaskId === task.id &&
+          !restart &&
+          !forceNewSession
+        ) {
           return currentSessionId;
         }
 
@@ -328,9 +350,10 @@ export function useGrokRuntime(
           task.acpSessionId ? "Restoring Grok Build session…" : "Starting Grok Build ACP…",
         );
 
-        const resumeSessionId =
-          task.acpSessionId ??
-          (restart && currentTaskId === task.id ? currentSessionId : null);
+        const resumeSessionId = forceNewSession
+          ? null
+          : task.acpSessionId ??
+            (restart && currentTaskId === task.id ? currentSessionId : null);
         const taskWorkspace = isWorkspaceSelected(task.workspacePath)
           ? task.workspacePath
           : workspacePath;
@@ -344,6 +367,7 @@ export function useGrokRuntime(
             await stopAcpSession();
             setConnectedSession(null, null);
             setPromptCapabilities(null);
+            setRuntimeModelState(null);
           }
 
           sessionTaskIdRef.current = task.id;
@@ -351,15 +375,28 @@ export function useGrokRuntime(
           const session = await startAcpSession(
             taskWorkspace,
             resumeSessionId,
+            task.runtimeProfile,
           );
           const nextSessionId = session.sessionId;
           setPromptCapabilities(session.promptCapabilities);
+          setRuntimeModelState(session.runtimeModelState);
           setConnectedSession(nextSessionId, task.id);
-          updateTask(task.id, (current) =>
-            current.acpSessionId === nextSessionId
-              ? current
-              : { ...current, acpSessionId: nextSessionId },
-          );
+          updateTask(task.id, (current) => {
+            const resolvedProfile = session.runtimeProfile;
+            if (
+              current.acpSessionId === nextSessionId &&
+              current.runtimeProfile.modelId === resolvedProfile.modelId &&
+              current.runtimeProfile.reasoningEffort ===
+                resolvedProfile.reasoningEffort
+            ) {
+              return current;
+            }
+            return {
+              ...current,
+              acpSessionId: nextSessionId,
+              runtimeProfile: resolvedProfile,
+            };
+          });
           setRuntime((current) =>
             current ? { ...current, authenticationState: "verified" } : current,
           );
@@ -372,6 +409,7 @@ export function useGrokRuntime(
         } catch (cause) {
           setConnectedSession(null, null);
           setPromptCapabilities(null);
+          setRuntimeModelState(null);
           if (isAuthenticationError(cause)) {
             setRuntime((current) =>
               current ? { ...current, authenticationState: "expired" } : current,
@@ -404,6 +442,118 @@ export function useGrokRuntime(
       return connectTask(task, restart);
     },
     [connectTask],
+  );
+
+  const refreshRuntimeModels = useCallback(async () => {
+    if (modelCatalogLoading) return runtimeModelState;
+    setModelCatalogLoading(true);
+    setError(null);
+    try {
+      const next = await inspectRuntimeModels();
+      setRuntimeModelState(next);
+      return next;
+    } catch (cause) {
+      setError(String(cause));
+      throw cause;
+    } finally {
+      setModelCatalogLoading(false);
+    }
+  }, [modelCatalogLoading, runtimeModelState]);
+
+  const configureRuntimeProfile = useCallback(
+    async (requested: RuntimeLaunchProfile) => {
+      if (modelConfiguring) return;
+      const fail = (message: string): never => {
+        setError(message);
+        throw new Error(message);
+      };
+      const model = runtimeModelState?.availableModels.find(
+        (candidate) => candidate.modelId === requested.modelId,
+      );
+      if (!model) {
+        const message =
+          "Refresh the official Runtime model list before saving this model.";
+        setError(message);
+        throw new Error(message);
+      }
+      const reasoningEffort = requested.reasoningEffort
+        ? (model.reasoningEfforts.find(
+            (effort) => effort.value === requested.reasoningEffort,
+          )?.value ?? null)
+        : null;
+      if (requested.reasoningEffort && !reasoningEffort) {
+        fail(
+          "The selected reasoning effort is not reported for this model.",
+        );
+      }
+      if (busy || permission) {
+        fail(
+          "Wait for the current Runtime action to finish before changing models.",
+        );
+      }
+
+      let profile: RuntimeLaunchProfile;
+      try {
+        profile = saveDefaultRuntimeProfile({
+          modelId: model.modelId,
+          reasoningEffort,
+        });
+        setDefaultRuntimeProfile(profile);
+      } catch (cause) {
+        setError(String(cause));
+        throw cause;
+      }
+      const task = activeTaskRef.current;
+      const authenticationReady =
+        runtime?.available === true &&
+        runtime.authenticationState !== "missing" &&
+        runtime.authenticationState !== "expired";
+      if (
+        !task ||
+        task.messages.length > 0 ||
+        !authenticationReady ||
+        !isWorkspaceSelected(workspacePath)
+      ) {
+        showNotice(
+          task?.messages.length
+            ? "模型设置已保存为新任务默认值；当前已有对话的任务继续使用原 ACP 会话。"
+            : "模型设置已保存为新任务默认值；完成登录并选择工作区后会在新任务中生效。",
+        );
+        return;
+      }
+
+      setModelConfiguring(true);
+      setError(null);
+      const nextTask: GrokTask = {
+        ...task,
+        acpSessionId: null,
+        runtimeProfile: profile,
+      };
+      updateTask(task.id, () => nextTask);
+      try {
+        await connectTask(nextTask, false, true);
+        showNotice(
+          `${model.name} · ${
+            model.reasoningEfforts.find(
+              (effort) => effort.value === reasoningEffort,
+            )?.label ?? "Runtime default effort"
+          } 已应用到当前空任务，并保存为新任务默认值。`,
+        );
+      } finally {
+        setModelConfiguring(false);
+      }
+    },
+    [
+      busy,
+      connectTask,
+      modelConfiguring,
+      permission,
+      runtime,
+      runtimeModelState,
+      showNotice,
+      updateTask,
+      workspacePath,
+    ],
   );
 
   useEffect(() => {
@@ -552,6 +702,7 @@ export function useGrokRuntime(
           await stopAcpSession().catch(() => undefined);
           setConnectedSession(null, null);
           setPromptCapabilities(null);
+          setRuntimeModelState(null);
           setStatusText("Grok Build · Ready to retry");
         }
       } finally {
@@ -818,6 +969,7 @@ export function useGrokRuntime(
       await stopAcpSession();
       setConnectedSession(null, null);
       setPromptCapabilities(null);
+      setRuntimeModelState(null);
       setStatusText("Grok Build · OAuth verified");
     };
     const operation = connectionQueueRef.current.then(stop, stop);
@@ -832,6 +984,8 @@ export function useGrokRuntime(
     runtime,
     sessionId,
     promptCapabilities,
+    runtimeModelState,
+    defaultRuntimeProfile,
     messages: activeTask?.messages ?? [],
     plan: activeTask?.plan ?? [],
     tools: activeTask?.tools ?? [],
@@ -841,6 +995,8 @@ export function useGrokRuntime(
     installing,
     signingIn,
     subscriptionLoading,
+    modelCatalogLoading,
+    modelConfiguring,
     subscription,
     statusText,
     error,
@@ -855,6 +1011,8 @@ export function useGrokRuntime(
     signIn,
     verifySubscription,
     manageSubscription,
+    refreshRuntimeModels,
+    configureRuntimeProfile,
     answerPermission,
     refreshRuntime,
     clearTerminal: () => setTerminalLines([]),

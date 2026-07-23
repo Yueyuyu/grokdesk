@@ -1,3 +1,7 @@
+use crate::runtime_models::{
+    runtime_model_state_from_initialize, validate_runtime_launch_value, RuntimeLaunchProfile,
+    RuntimeModelState,
+};
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -51,6 +55,8 @@ pub struct PromptCapabilities {
 pub struct AcpSessionInfo {
     session_id: String,
     prompt_capabilities: PromptCapabilities,
+    runtime_model_state: Option<RuntimeModelState>,
+    runtime_profile: RuntimeLaunchProfile,
 }
 
 #[derive(Debug, Deserialize)]
@@ -756,15 +762,25 @@ fn session_start_request(
 pub async fn start_acp_session(
     cwd: String,
     resume_session_id: Option<String>,
+    model_id: Option<String>,
+    reasoning_effort: Option<String>,
     app: AppHandle,
     bridge: State<'_, GrokBridge>,
 ) -> Result<AcpSessionInfo, String> {
+    let model_id = validate_runtime_launch_value(model_id, "model", 120, true)?;
+    let reasoning_effort =
+        validate_runtime_launch_value(reasoning_effort, "reasoning effort", 40, false)?;
     let resume_session_id = resume_session_id.filter(|session_id| !session_id.trim().is_empty());
     if let Some(session_id) = bridge.session_id.lock().await.clone() {
         if resume_session_id.as_deref() == Some(session_id.as_str()) {
             return Ok(AcpSessionInfo {
                 session_id,
                 prompt_capabilities: bridge.prompt_capabilities.lock().await.clone(),
+                runtime_model_state: None,
+                runtime_profile: RuntimeLaunchProfile {
+                    model_id,
+                    reasoning_effort,
+                },
             });
         }
     }
@@ -774,8 +790,15 @@ pub async fn start_acp_session(
     bridge.stop().await?;
 
     let mut command = Command::new(executable);
+    command.args(["agent", "--no-leader"]);
+    if let Some(model_id) = model_id.as_deref() {
+        command.args(["--model", model_id]);
+    }
+    if let Some(reasoning_effort) = reasoning_effort.as_deref() {
+        command.args(["--reasoning-effort", reasoning_effort]);
+    }
     command
-        .args(["agent", "--no-leader", "stdio"])
+        .arg("stdio")
         .current_dir(&workspace)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -840,6 +863,33 @@ pub async fn start_acp_session(
         }
     };
     let prompt_capabilities = prompt_capabilities_from_initialize(&initialize);
+    let runtime_model_state = runtime_model_state_from_initialize(&initialize);
+    if let Some(requested_model) = model_id.as_deref() {
+        let resolved_model = runtime_model_state
+            .as_ref()
+            .map(|state| state.current_model_id.as_str());
+        if resolved_model != Some(requested_model) {
+            let _ = bridge.stop().await;
+            return Err(format!(
+                "The official Grok Runtime did not activate model `{requested_model}`."
+            ));
+        }
+    }
+    let runtime_profile = RuntimeLaunchProfile {
+        model_id: model_id.clone().or_else(|| {
+            runtime_model_state
+                .as_ref()
+                .map(|state| state.current_model_id.clone())
+        }),
+        // The Runtime exposes available effort values in initialize metadata,
+        // but its current field remains the model default even when the
+        // official launch argument selects another effort.
+        reasoning_effort: reasoning_effort.clone().or_else(|| {
+            runtime_model_state
+                .as_ref()
+                .and_then(|state| state.current_reasoning_effort.clone())
+        }),
+    };
     *bridge.prompt_capabilities.lock().await = prompt_capabilities.clone();
 
     let (session_method, session_params) =
@@ -871,6 +921,8 @@ pub async fn start_acp_session(
     Ok(AcpSessionInfo {
         session_id,
         prompt_capabilities,
+        runtime_model_state,
+        runtime_profile,
     })
 }
 
