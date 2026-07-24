@@ -175,11 +175,11 @@ pub(crate) fn grok_executable() -> Result<PathBuf, String> {
     })
 }
 
-pub(crate) fn hide_console(command: &mut Command) {
+pub(crate) fn hide_console(_command: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        command.as_std_mut().creation_flags(CREATE_NO_WINDOW);
+        _command.as_std_mut().creation_flags(CREATE_NO_WINDOW);
     }
 }
 

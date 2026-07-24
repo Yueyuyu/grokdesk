@@ -286,10 +286,20 @@ fn repository_change(cwd: &str, path: &str) -> Result<(RepositoryState, Workspac
     Ok((repository, change))
 }
 
+fn looks_like_windows_rooted_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    path.starts_with('\\')
+        || (bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && matches!(bytes[2], b'\\' | b'/'))
+}
+
 fn validate_relative_path(root: &Path, relative: &str) -> Result<PathBuf, String> {
     let path = Path::new(relative);
     if relative.trim().is_empty()
         || path.is_absolute()
+        || looks_like_windows_rooted_path(relative)
         || path
             .components()
             .any(|component| !matches!(component, Component::Normal(_)))
@@ -605,6 +615,8 @@ mod tests {
         let directory = TestDirectory::create();
         assert!(validate_relative_path(&directory.0, "../outside.txt").is_err());
         assert!(validate_relative_path(&directory.0, "C:\\outside.txt").is_err());
+        assert!(validate_relative_path(&directory.0, "C:/outside.txt").is_err());
+        assert!(validate_relative_path(&directory.0, "\\\\server\\outside.txt").is_err());
     }
 
     #[test]
