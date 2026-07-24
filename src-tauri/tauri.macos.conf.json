@@ -22,8 +22,7 @@
         "transparent": false,
         "shadow": true
       }
-    ],
-    "macOSPrivateApi": true
+    ]
   },
   "bundle": {
     "targets": [
