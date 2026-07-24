@@ -37,6 +37,9 @@ jobs:
       - name: Run frontend tests
         run: npm test
 
+      - name: Check release version closure
+        run: npm run release:check-version
+
       - name: Build frontend
         run: npm run build
 

@@ -65,6 +65,7 @@ Der Agent bleibt die offizielle Grok Build CLI. GrokDesk verbessert die Desktop-
 | Echtes Workspace-Terminal | Führt Windows PowerShell oder die macOS-Benutzer-Shell im gewählten Projekt aus, zeigt stdout/stderr live und unterstützt Befehlsverlauf, Prozessbaum-Abbruch sowie eine getrennte ACP-Logansicht |
 | Hintergrund-Terminals und Testergebnisse | Führt bis zu acht unabhängige Terminal-Tabs parallel aus; Tabs können erstellt, umbenannt, geschlossen und einzeln gestoppt werden, während reale Vitest-, Cargo-, Jest- und Node-Ausgaben in Erfolgs-, Fehler- und Zeitangaben umgewandelt werden |
 | Runtime und Anmeldung | Ein-Klick-Installation der offiziellen Grok Runtime unter Windows und macOS sowie Anmeldung über `grok login --oauth` |
+| Vertrauenswürdige App-Updates | Settings prüft GitHub-Release-Metadaten automatisch; Download und Installation/Neustart brauchen getrennte Bestätigungen. Jedes Windows- und macOS-Updatepaket muss die dedizierte Updater-Signatur bestehen, und die Browser-Vorschau simuliert keine Updates |
 | Konto und lokale Aktivität | Eine eigene Account-Seite zeigt nur Abonnement-, Kontingent- und Periodendaten, die die offizielle Runtime tatsächlich liefert, sowie lokale Aktivitäts-Heatmaps und letzte Aufgaben, klar getrennt von der xAI-kontoweiten Nutzung |
 | Plugins und MCP | Liest und verwaltet reale Plugin-, Marketplace- und MCP-Daten der offiziellen Runtime |
 | Runtime-Kontext und Skills | Liest Projektanweisungen, Skills, Agents und Konfigurationsebenen für den aktuellen Workspace über das offizielle `grok inspect --json` und kombiniert sie mit den vom aktiven ACP gemeldeten Fähigkeiten; unterstützt Aktualisierung und ausdrückliches ACP-Neuverbinden, ohne simulierte Browser-Daten |
@@ -95,6 +96,8 @@ Das passende Paket kann unter [GitHub Releases](https://github.com/Yueyuyu/grokd
 | macOS Intel | Intel / `x86_64` `.dmg` | Für Intel-Macs |
 
 Die aktuellen macOS-Builds sind weder signiert noch notarisiert. Blockiert Gatekeeper den ersten Start, in Finder GrokDesk mit der rechten Maustaste anklicken und **Öffnen** wählen oder **Systemeinstellungen → Datenschutz & Sicherheit → Dennoch öffnen** verwenden. Nur aus den Releases dieses Repositorys herunterladen und das Paket mit `SHA256SUMS.txt` aus demselben Release prüfen.
+
+Ab v0.2.9 kann die installierte App unter **Settings → GrokDesk updates** nach Updates suchen. Automatische Prüfungen lesen nur Versionsmetadaten; Download, Installation und Neustart erfolgen nie still. In-App-Updates verwenden die verpflichtende Tauri-Signaturprüfung, manuelle Downloads sollten zusätzlich mit `SHA256SUMS.txt` geprüft werden.
 
 Beim ersten Start:
 
@@ -161,6 +164,7 @@ Windows-Pakete werden unter `src-tauri/target/release/bundle/` erzeugt. Unter ma
 - OAuth-Zugangsdaten werden von der offiziellen Grok CLI gespeichert und aktualisiert.
 - GrokDesk liest, zeigt oder speichert keine OAuth-Token.
 - Die Runtime-Installation führt ein offizielles Skript nur nach einem ausdrücklichen Klick aus: `https://x.ai/cli/install.ps1` unter Windows oder `https://x.ai/cli/install.sh` unter macOS.
+- App-Updates greifen nur auf öffentliche GitHub-Release-Metadaten und Pakete dieses Repositorys zu. Prüfungen dürfen automatisch laufen, Download, Installation und Neustart benötigen jeweils eine Bestätigung; die Browser-Vorschau erzeugt keine simulierten Ergebnisse.
 - Account-Heatmaps und letzte Aufgaben aggregieren nur lokal gespeicherte Aufgaben, Nachrichten und Tools des aktuellen Workspace. Sie lesen keine OAuth-Token und werden nicht als xAI-kontoweite Nutzung dargestellt.
 - ACP- und Git-Aktionen sind auf den vom Nutzer ausgewählten Ordner begrenzt.
 - Das Workspace-Terminal führt nur ausdrücklich eingegebene Befehle aus; Rohausgabe und strukturierte Testzusammenfassungen bleiben in der aktuellen App-Sitzung und werden nicht im Aufgabenverlauf gespeichert.
@@ -177,6 +181,7 @@ Windows-Pakete werden unter `src-tauri/target/release/bundle/` erzeugt. Unter ma
 ## Aktuelle Grenzen und Roadmap
 
 - macOS-DMGs sind derzeit weder signiert noch notarisiert; beim ersten Start kann eine manuelle Gatekeeper-Freigabe nötig sein. Signierung und Notarisierung bleiben geplant.
+- Windows Authenticode, macOS Developer ID und Apple-Notarisierung benötigen externe Zertifikate. Die Release-Pipeline bietet sichere Anschlusspunkte und meldet fehlende Signaturen ausdrücklich, wenn Secrets fehlen.
 - Ein offizielles Linux-Paket und eine Ein-Klick-Installation der Runtime sind noch nicht verfügbar.
 - Anhänge hängen letztlich von den ACP-Fähigkeiten der installierten offiziellen Runtime ab.
 - Abonnement und Kontingent hängen von der Billing-Methode der offiziellen CLI ab.

@@ -633,6 +633,17 @@
     flex-direction: column;
   }
 
+  .app-update__confirmation,
+  .app-update__actions {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .app-update__confirmation > div {
+    justify-content: flex-end;
+  }
+
   .account-panel__section-heading {
     align-items: flex-start;
     flex-direction: column;

@@ -77,6 +77,7 @@
 - `Ctrl+K` command palette for local cross-task search, navigation, task creation, workspace selection, and inspector commands.
 - Local permission and execution audit for redacted permission decisions, Grok tool lifecycles, and workspace-command outcomes, with filtering, search, retention disclosure, and confirmed clearing.
 - Native diagnostics for GrokDesk, Runtime, OAuth, ACP, workspace/Git, and Runtime-reported MCP state, with direct recovery actions and a sanitized Markdown support report. Browser previews never invent checks.
+- Signed GrokDesk updates backed by the official Tauri updater, the committed public key, automatic metadata checks, separate download and install/restart confirmations, real byte progress, and a browser-preview state that never fabricates update data.
 - Runtime Context inspection backed by official `grok inspect --json`, with project instructions, read-only Skills, aggregate Runtime composition, active ACP prompt capabilities, refresh, and explicit reconnect. Credential values, absolute source paths, MCP names/endpoints/headers, and simulated browser context remain excluded.
 - Runtime model profiles backed only by official ACP initialize metadata, with validated per-task/default model and reasoning selections passed through official launch arguments. Empty tasks may reconnect immediately; tasks with saved conversation keep their existing session.
 - Resizable left and right panes plus inspector collapse.
@@ -88,6 +89,7 @@
 - Real Grok binary detection, official OAuth launch, ACP session start, streamed session updates, permission response, and cancellation.
 - Up to four task-scoped official ACP clients with serialized process initialization, concurrent turns, idle-only LRU release, background completion/permission indicators, actionable in-app notifications, and Windows taskbar attention.
 - Windows x64 and macOS Apple Silicon/Intel release targets. macOS uses native traffic-light controls, the official `grok` binary under `~/.grok/bin`, `grok login --oauth`, `grok agent stdio`, the user shell for workspace commands, and `.app`/`.dmg` bundles.
+- Release maintenance closes over signed updater artifacts, a three-platform `latest.json`, Windows EXE/MSI and macOS DMG structure smoke tests, public re-download/checksum verification, optional OS signing hooks, and automatic retention of only the two newest public Releases while preserving tags.
 - Browser Account previews remain read-only: they expose no simulated login, subscription, quota, heatmap, or recent-task data.
 - Light/dark/system theme selection with shared layout and component geometry.
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "GrokDesk",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "identifier": "com.grokdesk.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -32,12 +32,14 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "category": "DeveloperTool",
     "shortDescription": "A desktop workspace for Grok Build",
     "longDescription": "GrokDesk presents the official Grok Build ACP runtime in a polished native task, plan, tool, diff, and terminal workspace.",
     "resources": {
-      "icons/icon.ico": "GrokDesk-v0.2.8.ico"
+      "icons/GrokDesk-v0.2.9.ico": "GrokDesk-v0.2.9.ico",
+      "windows/repair-versioned-shortcut.vbs": "repair-versioned-shortcut.vbs"
     },
     "icon": [
       "icons/32x32.png",
@@ -49,6 +51,25 @@
     "windows": {
       "nsis": {
         "installerHooks": "./windows/installer-hooks.nsh"
+      },
+      "wix": {
+        "fragmentPaths": [
+          "./windows/versioned-shortcut.wxs"
+        ],
+        "componentRefs": [
+          "VersionedShortcutRepairSupport"
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdCMkFENjk1OUFCODFGN0UKUldSK0g3aWFsZFlxZTQyNTZjbXJRYThFeXFaME04b1Zwa0JKbjRFVmpkT1BZU0NCbVlrVW1aMzUK",
+      "endpoints": [
+        "https://github.com/Yueyuyu/grokdesk/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

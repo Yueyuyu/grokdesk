@@ -65,6 +65,7 @@ The agent itself remains the official Grok Build CLI. GrokDesk focuses on the de
 | Real workspace terminal | Runs Windows PowerShell or the macOS user shell in the selected project with live stdout/stderr, command history, process-tree cancellation, and a separate ACP log view |
 | Background terminals and test results | Runs up to eight independent terminal tabs concurrently; tabs can be created, renamed, closed, and stopped individually, while real Vitest, Cargo, Jest, and Node output is parsed into pass, failure, and duration summaries |
 | Runtime and sign-in | One-click installation of the official Grok Runtime on Windows and macOS, with authentication through `grok login --oauth` |
+| Trusted app updates | Settings checks GitHub Release metadata automatically, while download and install/restart require separate confirmation; every Windows and macOS updater package must pass the dedicated updater signature, and browser preview invents nothing |
 | Account and local activity | A dedicated Account page shows only subscription, quota, and period data actually returned by the official Runtime, alongside workspace-local activity heatmaps and recent tasks clearly separated from xAI account-wide usage |
 | Plugins and MCP | Reads and manages real Plugin, Marketplace, and MCP state exposed by the official Runtime |
 | Runtime context and Skills | Reads project instructions, Skills, Agents, and configuration layers for the current workspace through official `grok inspect --json`, then combines capabilities reported by the active ACP session; supports refresh and explicit ACP reconnect, with no simulated browser records |
@@ -95,6 +96,8 @@ Download the package for your platform from [GitHub Releases](https://github.com
 | macOS Intel | Intel / `x86_64` `.dmg` | For Intel Macs |
 
 Current macOS builds are unsigned and unnotarized. If Gatekeeper blocks the first launch, right-click GrokDesk in Finder and choose **Open**, or use **System Settings → Privacy & Security → Open Anyway**. Download only from this repository and verify the package against `SHA256SUMS.txt` from the same release.
+
+Starting with v0.2.9, the installed app can check **Settings → GrokDesk updates**. Automatic checks read version metadata only; download, installation, and restart never happen silently. In-app packages use mandatory Tauri signature verification, while manual downloads should still be checked against `SHA256SUMS.txt`.
 
 On first launch:
 
@@ -161,6 +164,7 @@ Windows bundles are written to `src-tauri/target/release/bundle/`. On macOS, run
 - OAuth credentials are stored and refreshed by the official Grok CLI.
 - GrokDesk does not read, display, or persist OAuth tokens.
 - Runtime installation runs an official script only after an explicit click: `https://x.ai/cli/install.ps1` on Windows or `https://x.ai/cli/install.sh` on macOS.
+- App updates access only this repository's public GitHub Release metadata and packages. Checks may run automatically, but download, install, and restart each require confirmation; browser preview creates no simulated result.
 - Account heatmaps and recent tasks aggregate only tasks, messages, and Tools saved for the current local workspace. They do not read OAuth tokens or claim to represent xAI account-wide usage.
 - ACP and Git operations are scoped to the folder the user explicitly selected.
 - The workspace terminal runs only commands explicitly entered by the user; raw output and structured test summaries stay in the current app session and are not written to task history.
@@ -177,6 +181,7 @@ Windows bundles are written to `src-tauri/target/release/bundle/`. On macOS, run
 ## Current limits and roadmap
 
 - macOS DMGs are currently unsigned and unnotarized, so first launch may require a manual Gatekeeper override; signing and notarization remain planned work.
+- Windows Authenticode, macOS Developer ID, and Apple notarization require external certificates. The release pipeline has safe integration points and reports unsigned status when those secrets are absent.
 - No official Linux bundle or one-click Runtime installation is available yet.
 - Attachment support ultimately depends on the installed official Runtime's ACP capabilities.
 - Subscription and quota display depends on the official CLI's billing method.

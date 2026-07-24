@@ -120,6 +120,15 @@ pub async fn run_diagnostics(cwd: Option<String>, acp_connected: bool) -> Diagno
         "The diagnostics command completed inside the installed Tauri application.",
         None,
     )];
+    checks.push(DiagnosticCheck::new(
+        "signed-updater",
+        "app",
+        "Signed application updates",
+        DiagnosticStatus::Healthy,
+        "The desktop updater is configured with GrokDesk's dedicated public key.",
+        "Update metadata may be checked automatically. Download, installation, and restart still require explicit confirmation.",
+        None,
+    ));
 
     checks.push(if !runtime.available {
         DiagnosticCheck::new(

@@ -10,6 +10,8 @@ import type {
   RuntimeStatus,
   ThemePreference,
 } from "../types";
+import type { AppUpdateController } from "../hooks/useAppUpdate";
+import { AppUpdatePanel } from "./AppUpdatePanel";
 import { RuntimeModelSettings } from "./RuntimeModelSettings";
 
 interface FeaturePanelProps {
@@ -29,6 +31,8 @@ interface FeaturePanelProps {
   defaultRuntimeProfile: RuntimeLaunchProfile;
   taskHasConversation: boolean;
   preview: boolean;
+  updateRestartBlocked: boolean;
+  updater: AppUpdateController;
   onConnect: () => Promise<unknown>;
   onDisconnect: () => Promise<void>;
   onInstall: () => Promise<unknown>;
@@ -55,6 +59,8 @@ export function FeaturePanel({
   defaultRuntimeProfile,
   taskHasConversation,
   preview,
+  updateRestartBlocked,
+  updater,
   onConnect,
   onDisconnect,
   onInstall,
@@ -80,8 +86,10 @@ export function FeaturePanel({
   return (
     <main className="feature-panel feature-panel--settings">
       <header className="feature-panel__header">
-        <div><h1>Settings</h1><p>Runtime、模型、工作区与界面偏好。</p></div>
-        <span className="version-chip">GrokDesk v0.2.8</span>
+        <div><h1>Settings</h1><p>Runtime、更新、模型、工作区与界面偏好。</p></div>
+        <span className={`version-chip ${updater.state.phase === "available" ? "version-chip--update" : ""}`}>
+          GrokDesk v{updater.state.currentVersion}
+        </span>
       </header>
 
       {preview ? (
@@ -149,6 +157,15 @@ export function FeaturePanel({
             </button>
           </div>
         </div>
+      </section>
+
+      <section className="settings-section">
+        <h2>GrokDesk updates</h2>
+        <AppUpdatePanel
+          preview={preview}
+          restartBlocked={updateRestartBlocked}
+          updater={updater}
+        />
       </section>
 
       <section className="settings-section">

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <DirectoryRef Id="INSTALLDIR">
+      <Component Id="VersionedShortcutRepairSupport" Guid="*">
+        <RegistryValue
+          Root="HKCU"
+          Key="Software\grokdesk\GrokDesk"
+          Name="VersionedShortcutRepair"
+          Type="string"
+          Value="0.2.9"
+          KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+    <CustomAction
+      Id="RepairVersionedDesktopShortcut"
+      Directory="INSTALLDIR"
+      Execute="deferred"
+      Impersonate="yes"
+      Return="check"
+      ExeCommand="&quot;[SystemFolder]wscript.exe&quot; //B //NoLogo &quot;[INSTALLDIR]repair-versioned-shortcut.vbs&quot; &quot;[INSTALLDIR]&quot; &quot;GrokDesk-v0.2.9.ico&quot;" />
+    <InstallExecuteSequence>
+      <Custom
+        Action="RepairVersionedDesktopShortcut"
+        After="CreateShortcuts">NOT REMOVE</Custom>
+    </InstallExecuteSequence>
+  </Fragment>
+</Wix>

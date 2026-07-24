@@ -24,6 +24,7 @@ import { useAuditStore } from "./hooks/useAuditStore";
 import { useTaskStore } from "./hooks/useTaskStore";
 import { useWorkspaceChanges } from "./hooks/useWorkspaceChanges";
 import { useWorkspaceTerminal } from "./hooks/useWorkspaceTerminal";
+import { useAppUpdate } from "./hooks/useAppUpdate";
 import {
   chooseWorkspace,
   isDesktopRuntime,
@@ -96,6 +97,7 @@ export function App() {
   );
   const workspaceReady = isWorkspaceSelected(workspacePath);
   const preview = !isDesktopRuntime();
+  const updater = useAppUpdate(preview);
 
   const taskStore = useTaskStore(workspacePath);
   const auditStore = useAuditStore(workspacePath, !preview);
@@ -371,6 +373,10 @@ export function App() {
               (taskStore.activeTask?.messages.length ?? 0) > 0
             }
             preview={preview}
+            updateRestartBlocked={
+              grok.anyBusy || grok.hasAnyPermission || terminal.running
+            }
+            updater={updater}
             onConnect={grok.connect}
             onDisconnect={grok.disconnect}
             onInstall={grok.installRuntime}

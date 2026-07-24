@@ -65,6 +65,7 @@ Agent 本体には公式 Grok Build CLI をそのまま使用します。GrokDes
 | 実ワークスペースターミナル | 選択したプロジェクトで Windows PowerShell または macOS のユーザー Shell を実行し、stdout/stderr、コマンド履歴、プロセスツリー停止、独立した ACP ログ表示に対応 |
 | バックグラウンドターミナルとテスト結果 | 最大8個の独立ターミナルタブを並列実行し、作成・名前変更・終了・タブ単位の停止に対応。実際の Vitest、Cargo、Jest、Node 出力から成功数、失敗数、所要時間を抽出 |
 | Runtime とログイン | Windows / macOS で公式 Grok Runtime をワンクリック導入し、`grok login --oauth` で認証 |
+| 信頼できるアプリ更新 | Settings は GitHub Release のメタデータを自動確認しますが、ダウンロードとインストール／再起動は別々に確認します。Windows / macOS の更新パッケージは専用 Updater 署名の検証が必須で、ブラウザプレビューは更新を模擬しません |
 | アカウントとローカル活動 | 専用 Account 画面には公式 Runtime が実際に返したプラン、クォータ、期間だけを表示し、現在のワークスペースの活動ヒートマップと最近のタスクを xAI アカウント全体の使用量と明確に区別 |
 | Plugins と MCP | 公式 Runtime が公開する実際の Plugin、Marketplace、MCP 設定を表示・管理 |
 | Runtime コンテキストと Skills | 公式 `grok inspect --json` から現在のワークスペースのプロジェクト指示、Skills、Agents、設定レイヤーを読み取り、アクティブな ACP セッションが報告する機能を組み合わせます。更新と明示的な ACP 再接続に対応し、ブラウザでは記録を模擬しません |
@@ -95,6 +96,8 @@ Agent 本体には公式 Grok Build CLI をそのまま使用します。GrokDes
 | macOS Intel | Intel / `x86_64` `.dmg` | Intel Mac 向け |
 
 現在の macOS ビルドは未署名・未公証です。初回起動が Gatekeeper に遮断された場合は Finder で GrokDesk を右クリックして **開く** を選ぶか、**システム設定 → プライバシーとセキュリティ → このまま開く** を使用してください。本リポジトリの Release だけから取得し、同じ Release の `SHA256SUMS.txt` で検証してください。
+
+v0.2.9 以降、インストール版の **Settings → GrokDesk updates** から更新を確認できます。自動確認はバージョン情報だけを読み取り、ダウンロード、インストール、再起動は自動実行しません。アプリ内更新は Tauri の必須署名検証を使用し、手動ダウンロードは引き続き `SHA256SUMS.txt` で確認してください。
 
 初回起動時：
 
@@ -161,6 +164,7 @@ Windows の生成物は `src-tauri/target/release/bundle/` に出力されます
 - OAuth 資格情報は公式 Grok CLI が保存・更新します。
 - GrokDesk は OAuth Token を読み取り、表示、永続化しません。
 - Runtime の導入は明示的なクリック後にのみ公式スクリプトを実行します。Windows は `https://x.ai/cli/install.ps1`、macOS は `https://x.ai/cli/install.sh` を使用します。
+- アプリ更新は本リポジトリの公開 GitHub Release 情報とパッケージだけにアクセスします。確認は自動でも、ダウンロード、インストール、再起動にはそれぞれ確認が必要で、ブラウザプレビューは結果を模擬しません。
 - Account のヒートマップと最近のタスクは、現在のローカルワークスペースに保存されたタスク、メッセージ、Tools だけを集計します。OAuth Token を読まず、xAI アカウント全体の使用量とは称しません。
 - ACP と Git 操作は、ユーザーが選んだフォルダーに限定されます。
 - ワークスペースターミナルはユーザーが明示的に入力したコマンドだけを実行し、生の出力と構造化テスト概要は現在のアプリセッション内にのみ保持されます。
@@ -177,6 +181,7 @@ Windows の生成物は `src-tauri/target/release/bundle/` に出力されます
 ## 現在の制限とロードマップ
 
 - macOS DMG は現在未署名・未公証のため、初回起動に Gatekeeper の手動許可が必要な場合があります。署名と公証は今後の対応です。
+- Windows Authenticode、macOS Developer ID、Apple 公証には外部証明書が必要です。Release パイプラインには安全な接続点があり、Secrets がない場合は未署名状態を明示します。
 - Linux の正式パッケージと Runtime のワンクリック導入はまだありません。
 - 添付対応は、インストール済みの公式 Runtime が公開する ACP 機能に依存します。
 - 契約プランと利用量は、公式 CLI の billing メソッドに依存します。

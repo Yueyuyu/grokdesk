@@ -135,7 +135,7 @@ export function DiagnosticCenter({
         <span className="feature-panel__icon"><Pulse size={22} /></span>
         <div>
           <h1>Diagnostics</h1>
-          <p>Check the native app, Runtime, OAuth, ACP, workspace, Git, and MCP.</p>
+          <p>Check the native app, signed updater, Runtime, OAuth, ACP, workspace, Git, and MCP.</p>
         </div>
         <div className="diagnostic-header-actions">
           <button

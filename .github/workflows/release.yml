@@ -10,12 +10,17 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   windows:
     name: Build Windows x64
     runs-on: windows-latest
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,20 +40,99 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Check release version closure
+        run: npm run release:check-version
+
       - name: Run native tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
-      - name: Build NSIS and MSI installers
-        run: npm run tauri:build
+      - name: Require updater signing secrets
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY) -or
+              [string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
+            throw "TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD are required."
+          }
 
-      - name: Collect Windows installers
+      - name: Prepare optional Windows Authenticode certificate
+        if: ${{ env.WINDOWS_CERTIFICATE_BASE64 != '' }}
+        shell: pwsh
+        run: |
+          $certificatePath = Join-Path $env:RUNNER_TEMP "grokdesk-release.pfx"
+          [IO.File]::WriteAllBytes(
+            $certificatePath,
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64)
+          )
+          $securePassword = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate `
+            -FilePath $certificatePath `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password $securePassword
+          if (-not $certificate) {
+            throw "The Windows code-signing certificate could not be imported."
+          }
+          $configPath = Join-Path $env:RUNNER_TEMP "tauri-windows-signing.json"
+          @{
+            bundle = @{
+              windows = @{
+                certificateThumbprint = $certificate.Thumbprint
+                digestAlgorithm = "sha256"
+                timestampUrl = "http://timestamp.digicert.com"
+              }
+            }
+          } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $configPath -Encoding utf8
+          "TAURI_WINDOWS_SIGNING_CONFIG=$configPath" >> $env:GITHUB_ENV
+          "WINDOWS_AUTHENTICODE_REQUIRED=true" >> $env:GITHUB_ENV
+
+      - name: Build NSIS and MSI installers
+        shell: pwsh
+        run: |
+          if ($env:TAURI_WINDOWS_SIGNING_CONFIG) {
+            npm run tauri:build -- --config $env:TAURI_WINDOWS_SIGNING_CONFIG
+          } else {
+            npm run tauri:build
+            "WINDOWS_AUTHENTICODE_REQUIRED=false" >> $env:GITHUB_ENV
+          }
+
+      - name: Smoke-test Windows installers
+        shell: pwsh
+        run: |
+          $arguments = @{
+            BundleDirectory = "src-tauri/target/release/bundle"
+            ExpectedVersion = (node -p "require('./package.json').version")
+            RequireSevenZip = $true
+          }
+          if ($env:WINDOWS_AUTHENTICODE_REQUIRED -eq "true") {
+            $arguments.RequireAuthenticode = $true
+          }
+          ./scripts/smoke-windows-package.ps1 @arguments
+
+      - name: Verify Windows updater signatures
+        shell: pwsh
+        run: |
+          $packages = Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -File |
+            Where-Object { $_.Extension -in ".exe", ".msi" }
+          foreach ($package in $packages) {
+            cargo run --quiet `
+              --manifest-path src-tauri/Cargo.toml `
+              --example verify_updater_signature `
+              -- src-tauri/tauri.conf.json $package.FullName "$($package.FullName).sig"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Updater signature verification failed for $($package.Name)."
+            }
+          }
+
+      - name: Collect Windows installers and updater signatures
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path release-assets -Force | Out-Null
           $assets = Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -File |
-            Where-Object { $_.Extension -in ".exe", ".msi" }
+            Where-Object {
+              $_.Extension -in ".exe", ".msi" -or
+              $_.Name -match "\.(exe|msi)\.sig$"
+            }
           if (-not $assets) {
-            throw "No Windows installer was produced."
+            throw "No Windows installer or updater signature was produced."
           }
           $assets | Copy-Item -Destination release-assets
 
@@ -62,14 +146,25 @@ jobs:
   macos:
     name: Build macOS ${{ matrix.label }}
     runs-on: macos-latest
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - label: Apple-Silicon
             target: aarch64-apple-darwin
+            updater_arch: aarch64
           - label: Intel
             target: x86_64-apple-darwin
+            updater_arch: x86_64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -91,31 +186,88 @@ jobs:
       - name: Run frontend tests
         run: npm test
 
+      - name: Check release version closure
+        run: npm run release:check-version
+
       - name: Run native tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Require updater signing secrets
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY"
+          test -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+
+      - name: Import optional Apple Developer ID certificate
+        if: ${{ env.APPLE_CERTIFICATE_BASE64 != '' }}
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Record macOS signing mode
+        run: |
+          if [[ -n "$APPLE_CERTIFICATE_BASE64" ]]; then
+            test -n "$APPLE_SIGNING_IDENTITY"
+            echo "MACOS_SIGNATURE_REQUIRED=true" >> "$GITHUB_ENV"
+          else
+            echo "MACOS_SIGNATURE_REQUIRED=false" >> "$GITHUB_ENV"
+            echo "APPLE_SIGNING_IDENTITY=" >> "$GITHUB_ENV"
+            echo "APPLE_ID=" >> "$GITHUB_ENV"
+            echo "APPLE_PASSWORD=" >> "$GITHUB_ENV"
+            echo "APPLE_TEAM_ID=" >> "$GITHUB_ENV"
+          fi
 
       - name: Build macOS app and DMG
         run: npm run tauri:build -- --target "${{ matrix.target }}" --bundles app,dmg
 
-      - name: Collect macOS DMG
+      - name: Smoke-test macOS installer
+        run: |
+          chmod +x scripts/smoke-macos-package.sh
+          scripts/smoke-macos-package.sh \
+            "src-tauri/target/${{ matrix.target }}/release/bundle" \
+            "$(node -p "require('./package.json').version")" \
+            "${{ matrix.updater_arch }}" \
+            "$MACOS_SIGNATURE_REQUIRED"
+
+      - name: Verify macOS updater signature
+        run: |
+          archive="$(find "src-tauri/target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -type f -name '*.app.tar.gz' -print -quit)"
+          cargo run --quiet \
+            --manifest-path src-tauri/Cargo.toml \
+            --example verify_updater_signature \
+            -- src-tauri/tauri.conf.json "$archive" "$archive.sig"
+
+      - name: Collect macOS installer and updater archive
         run: |
           mkdir -p release-assets
           shopt -s nullglob
           dmgs=(src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg)
+          archives=(src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz)
           test "${#dmgs[@]}" -gt 0
+          test "${#archives[@]}" -eq 1
+          test -s "${archives[0]}.sig"
           cp "${dmgs[@]}" release-assets/
+          version="$(node -p "require('./package.json').version")"
+          archive_name="GrokDesk_${version}_${{ matrix.updater_arch }}.app.tar.gz"
+          cp "${archives[0]}" "release-assets/$archive_name"
+          cp "${archives[0]}.sig" "release-assets/$archive_name.sig"
 
-      - name: Upload macOS installer
+      - name: Upload macOS installer and updater archive
         uses: actions/upload-artifact@v4
         with:
           name: grokdesk-macos-${{ matrix.label }}
-          path: release-assets/*.dmg
+          path: |
+            release-assets/*.dmg
+            release-assets/*.app.tar.gz
+            release-assets/*.app.tar.gz.sig
           if-no-files-found: error
 
   publish:
     name: Publish GitHub Release
     needs: [windows, macos]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -135,11 +287,36 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Generate signed updater manifest
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          published_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          node scripts/generate-updater-manifest.mjs \
+            --assets release-assets \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
+            --version "$version" \
+            --output release-assets/latest.json \
+            --notes "GrokDesk $version adds signed in-app updates, explicit download/install confirmation, package smoke tests, and automatic release retention." \
+            --published-at "$published_at"
+          jq -e \
+            '.platforms["windows-x86_64"].signature and
+             .platforms["darwin-aarch64"].signature and
+             .platforms["darwin-x86_64"].signature' \
+            release-assets/latest.json >/dev/null
+
       - name: Generate SHA256 checksums
         shell: bash
         run: |
           cd release-assets
-          find . -maxdepth 1 -type f \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' \) -printf '%f\n' |
+          find . -maxdepth 1 -type f \( \
+            -name '*.exe' -o \
+            -name '*.msi' -o \
+            -name '*.dmg' -o \
+            -name '*.app.tar.gz' -o \
+            -name 'latest.json' \
+          \) -printf '%f\n' |
             sort |
             xargs sha256sum > SHA256SUMS.txt
           test -s SHA256SUMS.txt
@@ -152,5 +329,39 @@ jobs:
           gh release create "$GITHUB_REF_NAME" release-assets/* \
             --title "GrokDesk $GITHUB_REF_NAME" \
             --generate-notes \
-            --notes "Windows x64 and macOS Apple Silicon/Intel installers are attached. macOS builds are currently unsigned and unnotarized, so Gatekeeper may require Finder → Open or System Settings → Privacy & Security → Open Anyway. Verify downloads with SHA256SUMS.txt." \
+            --notes "Windows x64 and macOS Apple Silicon/Intel installers are attached. In-app updater packages are signed with the dedicated GrokDesk updater key; OS-level Authenticode, Developer ID, and notarization status depends on whether the corresponding release secrets are configured. Unsigned macOS builds may require Finder → Open or System Settings → Privacy & Security → Open Anyway. Verify standalone downloads with SHA256SUMS.txt." \
             --verify-tag
+
+      - name: Verify public release assets and checksums
+        shell: bash
+        run: |
+          verify_dir="$(mktemp -d)"
+          trap 'rm -rf "$verify_dir"' EXIT
+          while IFS= read -r asset; do
+            test -n "$asset"
+            curl --fail --location --silent --show-error \
+              --output "$verify_dir/$asset" \
+              "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$asset"
+          done < <(cd release-assets && find . -maxdepth 1 -type f -printf '%f\n' | sort)
+          (
+            cd "$verify_dir"
+            sha256sum --check SHA256SUMS.txt
+            jq -e --arg version "$(node -p "require('$GITHUB_WORKSPACE/package.json').version")" \
+              '.version == $version and (.platforms | length) == 3' \
+              latest.json >/dev/null
+          )
+
+      - name: Keep only the two newest public Releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mapfile -t stale_releases < <(
+            gh release list \
+              --limit 100 \
+              --json tagName,isDraft,publishedAt \
+              --jq 'map(select(.isDraft == false)) | sort_by(.publishedAt) | reverse | .[2:] | .[].tagName'
+          )
+          for tag in "${stale_releases[@]}"; do
+            gh release delete "$tag" --yes
+          done
