@@ -150,11 +150,6 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     strategy:
       fail-fast: false
       matrix:
@@ -205,16 +200,26 @@ jobs:
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
       - name: Record macOS signing mode
+        env:
+          APPLE_SIGNING_IDENTITY_SECRET: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD_SECRET: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           if [[ -n "$APPLE_CERTIFICATE_BASE64" ]]; then
-            test -n "$APPLE_SIGNING_IDENTITY"
+            test -n "$APPLE_SIGNING_IDENTITY_SECRET"
             echo "MACOS_SIGNATURE_REQUIRED=true" >> "$GITHUB_ENV"
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY_SECRET" >> "$GITHUB_ENV"
+            if [[ -n "$APPLE_ID_SECRET$APPLE_PASSWORD_SECRET$APPLE_TEAM_ID_SECRET" ]]; then
+              test -n "$APPLE_ID_SECRET"
+              test -n "$APPLE_PASSWORD_SECRET"
+              test -n "$APPLE_TEAM_ID_SECRET"
+              echo "APPLE_ID=$APPLE_ID_SECRET" >> "$GITHUB_ENV"
+              echo "APPLE_PASSWORD=$APPLE_PASSWORD_SECRET" >> "$GITHUB_ENV"
+              echo "APPLE_TEAM_ID=$APPLE_TEAM_ID_SECRET" >> "$GITHUB_ENV"
+            fi
           else
             echo "MACOS_SIGNATURE_REQUIRED=false" >> "$GITHUB_ENV"
-            echo "APPLE_SIGNING_IDENTITY=" >> "$GITHUB_ENV"
-            echo "APPLE_ID=" >> "$GITHUB_ENV"
-            echo "APPLE_PASSWORD=" >> "$GITHUB_ENV"
-            echo "APPLE_TEAM_ID=" >> "$GITHUB_ENV"
           fi
 
       - name: Build macOS app and DMG
