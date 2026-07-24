@@ -38,10 +38,10 @@ if ($sevenZipExecutable) {
   if ($LASTEXITCODE -ne 0) {
     throw "7-Zip could not inspect the NSIS installer."
   }
-  if ($nsisListing -notmatch "grokdesk\.exe") {
+  if (-not ($nsisListing -match "grokdesk\.exe")) {
     throw "The NSIS installer does not contain grokdesk.exe."
   }
-  if ($nsisListing -notmatch "GrokDesk-v$([regex]::Escape($ExpectedVersion))\.ico") {
+  if (-not ($nsisListing -match "GrokDesk-v$([regex]::Escape($ExpectedVersion))\.ico")) {
     throw "The NSIS installer does not contain the versioned desktop icon."
   }
 } elseif ($RequireSevenZip) {
