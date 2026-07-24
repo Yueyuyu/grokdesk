@@ -6,6 +6,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { AccountPanel } from "./components/AccountPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { DiagnosticCenter } from "./components/DiagnosticCenter";
 import { FeaturePanel } from "./components/FeaturePanel";
@@ -177,9 +178,11 @@ export function App() {
     localStorage.setItem("grokdesk.workspace", selected);
   };
 
+  const inspectorAvailable = activeNavigation === "tasks";
+  const inspectorVisible = inspectorAvailable && !inspectorCollapsed;
   const gridStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
-    "--inspector-width": inspectorCollapsed ? "0px" : `${inspectorWidth}px`,
+    "--inspector-width": inspectorVisible ? `${inspectorWidth}px` : "0px",
   } as CSSProperties;
 
   return (
@@ -190,7 +193,7 @@ export function App() {
         }}
       />
       <div
-        className={`app-grid ${inspectorCollapsed ? "inspector-is-collapsed" : ""}`}
+        className={`app-grid ${inspectorVisible ? "" : "inspector-is-collapsed"}`}
         style={gridStyle}
       >
         <Sidebar
@@ -332,6 +335,20 @@ export function App() {
             connected={Boolean(grok.sessionId)}
             onOpenSettings={() => setActiveNavigation("settings")}
           />
+        ) : activeNavigation === "account" ? (
+          <AccountPanel
+            runtime={grok.runtime}
+            subscription={grok.subscription}
+            connected={Boolean(grok.sessionId)}
+            signingIn={grok.signingIn}
+            subscriptionLoading={grok.subscriptionLoading}
+            workspaceReady={workspaceReady}
+            preview={preview}
+            tasks={searchableTasks}
+            onSignIn={grok.signIn}
+            onVerifySubscription={grok.verifySubscription}
+            onManageSubscription={grok.manageSubscription}
+          />
         ) : (
           <FeaturePanel
             theme={theme}
@@ -340,11 +357,8 @@ export function App() {
             onChooseWorkspace={() => void pickWorkspace()}
             workspaceSwitchDisabled={workspaceSwitchBlocked}
             runtime={grok.runtime}
-            subscription={grok.subscription}
             connected={Boolean(grok.sessionId)}
             installing={grok.installing}
-            signingIn={grok.signingIn}
-            subscriptionLoading={grok.subscriptionLoading}
             modelConfiguring={grok.modelConfiguring}
             modelCatalogLoading={grok.modelCatalogLoading}
             modelChangeDisabled={
@@ -360,15 +374,12 @@ export function App() {
             onConnect={grok.connect}
             onDisconnect={grok.disconnect}
             onInstall={grok.installRuntime}
-            onSignIn={grok.signIn}
-            onVerifySubscription={grok.verifySubscription}
-            onManageSubscription={grok.manageSubscription}
             onConfigureRuntimeProfile={grok.configureRuntimeProfile}
             onRefreshRuntimeModels={grok.refreshRuntimeModels}
           />
         )}
 
-        {!inspectorCollapsed ? (
+        {inspectorVisible ? (
           <>
             <Resizer
               side="right"
@@ -397,7 +408,7 @@ export function App() {
               onReconnect={() => grok.connect(true)}
             />
           </>
-        ) : (
+        ) : inspectorAvailable ? (
           <button
             type="button"
             className="inspector-reveal"
@@ -407,7 +418,7 @@ export function App() {
             <CaretLeft size={14} />
             <SidebarSimple size={17} />
           </button>
-        )}
+        ) : null}
       </div>
 
       {grok.error ? (

@@ -1,16 +1,10 @@
 import {
-  ArrowSquareOut,
-  ArrowClockwise,
-  CreditCard,
   DownloadSimple,
   FolderOpen,
-  Info,
-  UserCircle,
 } from "@phosphor-icons/react";
-import { formatCreditUsage, getAuthenticationLabel } from "../lib/runtime";
+import { getAuthenticationLabel } from "../lib/runtime";
 import { isWorkspaceSelected } from "../lib/workspace";
 import type {
-  GrokSubscription,
   RuntimeLaunchProfile,
   RuntimeModelState,
   RuntimeStatus,
@@ -25,11 +19,8 @@ interface FeaturePanelProps {
   onChooseWorkspace: () => void;
   workspaceSwitchDisabled: boolean;
   runtime: RuntimeStatus | null;
-  subscription: GrokSubscription | null;
   connected: boolean;
   installing: boolean;
-  signingIn: boolean;
-  subscriptionLoading: boolean;
   modelConfiguring: boolean;
   modelCatalogLoading: boolean;
   modelChangeDisabled: boolean;
@@ -41,20 +32,10 @@ interface FeaturePanelProps {
   onConnect: () => Promise<unknown>;
   onDisconnect: () => Promise<void>;
   onInstall: () => Promise<unknown>;
-  onSignIn: () => Promise<void>;
-  onVerifySubscription: () => Promise<unknown>;
-  onManageSubscription: () => Promise<void>;
   onConfigureRuntimeProfile: (
     profile: RuntimeLaunchProfile,
   ) => Promise<void>;
   onRefreshRuntimeModels: () => Promise<unknown>;
-}
-
-function formatPeriodEnd(value: string | null | undefined) {
-  if (!value) return "尚未查询";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(date);
 }
 
 export function FeaturePanel({
@@ -64,11 +45,8 @@ export function FeaturePanel({
   onChooseWorkspace,
   workspaceSwitchDisabled,
   runtime,
-  subscription,
   connected,
   installing,
-  signingIn,
-  subscriptionLoading,
   modelConfiguring,
   modelCatalogLoading,
   modelChangeDisabled,
@@ -80,9 +58,6 @@ export function FeaturePanel({
   onConnect,
   onDisconnect,
   onInstall,
-  onSignIn,
-  onVerifySubscription,
-  onManageSubscription,
   onConfigureRuntimeProfile,
   onRefreshRuntimeModels,
 }: FeaturePanelProps) {
@@ -99,23 +74,14 @@ export function FeaturePanel({
     canUseAccount &&
     authenticationState !== "missing" &&
     authenticationState !== "expired";
-  const subscriptionUnavailable = subscription?.availability === "unsupported";
-  const subscriptionPlaceholder = subscriptionUnavailable
-    ? "官方 CLI 暂不提供"
-    : canVerifyAccount && !workspaceReady
-      ? "选择工作区后查询"
-      : "尚未查询";
-  const periodEnd = subscriptionUnavailable
-    ? subscriptionPlaceholder
-    : formatPeriodEnd(subscription?.periodEnd);
   const canApplyModelToCurrent =
     canVerifyAccount && workspaceReady && !taskHasConversation;
 
   return (
     <main className="feature-panel feature-panel--settings">
       <header className="feature-panel__header">
-        <div><h1>Settings</h1><p>Runtime、Grok 账号、订阅与界面偏好。</p></div>
-        <span className="version-chip">GrokDesk v0.2.7</span>
+        <div><h1>Settings</h1><p>Runtime、模型、工作区与界面偏好。</p></div>
+        <span className="version-chip">GrokDesk v0.2.8</span>
       </header>
 
       {preview ? (
@@ -203,65 +169,6 @@ export function FeaturePanel({
         />
       </section>
 
-      <section className="settings-section">
-        <h2>Grok account & subscription</h2>
-        <div className="account-summary">
-          <div className="account-summary__heading">
-            <span className="settings-row__icon"><UserCircle size={21} /></span>
-            <span>
-              <strong>{authenticationLabel}</strong>
-              <small>通过官方 Grok OAuth 登录；GrokDesk 不保存 Token。</small>
-            </span>
-          </div>
-          <dl>
-            <div><dt>当前套餐</dt><dd>{subscription?.tier || subscriptionPlaceholder}</dd></div>
-            <div><dt>额度用量</dt><dd>{subscriptionUnavailable ? subscriptionPlaceholder : formatCreditUsage(subscription?.creditUsagePercent ?? null)}</dd></div>
-            <div><dt>本周期结束</dt><dd>{periodEnd}</dd></div>
-          </dl>
-          {canVerifyAccount && !workspaceReady ? (
-            <div className="account-summary__notice" role="status">
-              <Info size={16} />
-              <span>登录已完成。选择项目文件夹后，GrokDesk 会启动 ACP 并自动刷新账号信息。</span>
-            </div>
-          ) : subscription?.message ? (
-            <div className="account-summary__notice" role="status">
-              <Info size={16} />
-              <span>{subscription.message}</span>
-            </div>
-          ) : null}
-          <div className="runtime-summary__actions account-summary__actions">
-            <button
-              type="button"
-              className={canVerifyAccount ? "secondary-button" : "primary-button"}
-              disabled={!canUseAccount || signingIn}
-              onClick={() => void onSignIn().catch(() => undefined)}
-            >
-              <ArrowSquareOut size={16} />
-              {signingIn
-                ? "等待 OAuth…"
-                : canVerifyAccount
-                  ? "重新登录 / 切换账号"
-                  : "使用 Grok 账号登录"}
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={!canVerifyAccount || !workspaceReady || subscriptionLoading}
-              onClick={() => void onVerifySubscription().catch(() => undefined)}
-            >
-              <ArrowClockwise size={16} />
-              {subscriptionLoading ? "正在刷新…" : "刷新账号与订阅"}
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => void onManageSubscription().catch(() => undefined)}
-            >
-              <CreditCard size={16} /> 管理 / 升级订阅
-            </button>
-          </div>
-        </div>
-      </section>
     </main>
   );
 }

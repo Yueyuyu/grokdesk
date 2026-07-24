@@ -52,6 +52,10 @@
     padding: 0;
   }
 
+  html[data-platform="macos"] .titlebar__brand {
+    display: none;
+  }
+
   .titlebar__brand span,
   .sidebar__section-label,
   .workspace-switcher__label,
@@ -627,5 +631,33 @@
   .runtime-summary__actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .account-panel__section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .activity-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .activity-summary > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .activity-summary > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .activity-card > header,
+  .activity-table-card > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .activity-table-card > header > span {
+    text-align: left;
   }
 }

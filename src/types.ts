@@ -6,6 +6,7 @@ export type NavigationKey =
   | "diagnostics"
   | "plugins"
   | "mcp"
+  | "account"
   | "settings";
 
 export type InspectorTab = "changes" | "terminal" | "tests" | "context";
@@ -232,6 +233,7 @@ export interface ChatEntry {
   role: "user" | "agent";
   name: string;
   time: string;
+  createdAt?: string;
   content: string;
   attachments?: ChatAttachmentSummary[];
   streaming?: boolean;

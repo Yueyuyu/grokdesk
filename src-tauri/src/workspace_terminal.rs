@@ -7,6 +7,8 @@ use tokio::{
     sync::{watch, Mutex},
 };
 
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
@@ -153,6 +155,8 @@ fn shell_command(workspace: &PathBuf, command_line: &str) -> Command {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    #[cfg(unix)]
+    command.as_std_mut().process_group(0);
     command
 }
 
@@ -213,7 +217,31 @@ async fn terminate_process_tree(child: &mut Child) {
 
 #[cfg(not(windows))]
 async fn terminate_process_tree(child: &mut Child) {
+    #[cfg(unix)]
+    if let Some(pid) = child.id() {
+        // The shell is started as its own process group so cancellation also
+        // reaches test runners and other descendants on macOS/Linux.
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGTERM);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+        if child.try_wait().ok().flatten().is_none() {
+            unsafe {
+                libc::kill(-(pid as i32), libc::SIGKILL);
+            }
+        }
+    }
     let _ = child.kill().await;
+}
+
+#[cfg(windows)]
+fn workspace_shell_name() -> &'static str {
+    "PowerShell"
+}
+
+#[cfg(not(windows))]
+fn workspace_shell_name() -> &'static str {
+    "workspace shell"
 }
 
 async fn execute_command(
@@ -224,17 +252,18 @@ async fn execute_command(
     mut cancel: watch::Receiver<bool>,
 ) -> Result<WorkspaceCommandResult, String> {
     let started = Instant::now();
+    let shell_name = workspace_shell_name();
     let mut child = shell_command(&workspace, &command_line)
         .spawn()
-        .map_err(|error| format!("Could not start PowerShell: {error}"))?;
+        .map_err(|error| format!("Could not start {shell_name}: {error}"))?;
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| "PowerShell stdout is unavailable.".to_string())?;
+        .ok_or_else(|| "Workspace shell stdout is unavailable.".to_string())?;
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| "PowerShell stderr is unavailable.".to_string())?;
+        .ok_or_else(|| "Workspace shell stderr is unavailable.".to_string())?;
 
     // 两个管道必须并行读取，否则大量输出可能填满缓冲区并阻塞子进程。
     let stdout_task = tokio::spawn(forward_output(
@@ -248,14 +277,14 @@ async fn execute_command(
     let mut cancelled = false;
     let status = tokio::select! {
         result = child.wait() => {
-            result.map_err(|error| format!("Could not wait for PowerShell: {error}"))?
+            result.map_err(|error| format!("Could not wait for {shell_name}: {error}"))?
         }
         changed = cancel.changed() => {
             if changed.is_ok() && *cancel.borrow() {
                 cancelled = true;
                 terminate_process_tree(&mut child).await;
             }
-            child.wait().await.map_err(|error| format!("Could not stop PowerShell: {error}"))?
+            child.wait().await.map_err(|error| format!("Could not stop {shell_name}: {error}"))?
         }
     };
 

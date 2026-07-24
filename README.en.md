@@ -4,7 +4,7 @@
 
 <h1 align="center">GrokDesk</h1>
 
-<p align="center">Bring the official Grok Build experience into a clear, reviewable Windows desktop workspace.</p>
+<p align="center">Bring the official Grok Build experience into a clear, reviewable Windows and macOS desktop workspace.</p>
 
 <p align="center">
   <a href="README.md">简体中文</a> ·
@@ -39,6 +39,7 @@
   <img alt="Rust" src="https://img.shields.io/badge/Rust-native-000000?style=flat-square&amp;logo=rust&amp;logoColor=white" />
   <img alt="ACP" src="https://img.shields.io/badge/Protocol-ACP-7C3AED?style=flat-square" />
   <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square&amp;logo=windows11&amp;logoColor=white" />
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-000000?style=flat-square&amp;logo=apple&amp;logoColor=white" />
 </p>
 
 > [!IMPORTANT]
@@ -61,9 +62,10 @@ The agent itself remains the official Grok Build CLI. GrokDesk focuses on the de
 | Docked Tools | Tool activity stays directly above the composer, shows the five latest items, and expands to the full activity list |
 | Files and images | Multi-select, drag and drop, previews, removal, and attachment-only prompts; content is sent as real ACP image or resource blocks |
 | Workspace review | Explicit project-folder selection, real Git status and unified diffs, per-file stage/unstage, and confirmed revert |
-| Real workspace terminal | Runs PowerShell in the selected project with live stdout/stderr, command history, process-tree cancellation, and a separate ACP log view |
+| Real workspace terminal | Runs Windows PowerShell or the macOS user shell in the selected project with live stdout/stderr, command history, process-tree cancellation, and a separate ACP log view |
 | Background terminals and test results | Runs up to eight independent terminal tabs concurrently; tabs can be created, renamed, closed, and stopped individually, while real Vitest, Cargo, Jest, and Node output is parsed into pass, failure, and duration summaries |
-| Runtime and sign-in | One-click installation of the official Grok Runtime and authentication through `grok login --oauth` |
+| Runtime and sign-in | One-click installation of the official Grok Runtime on Windows and macOS, with authentication through `grok login --oauth` |
+| Account and local activity | A dedicated Account page shows only subscription, quota, and period data actually returned by the official Runtime, alongside workspace-local activity heatmaps and recent tasks clearly separated from xAI account-wide usage |
 | Plugins and MCP | Reads and manages real Plugin, Marketplace, and MCP state exposed by the official Runtime |
 | Runtime context and Skills | Reads project instructions, Skills, Agents, and configuration layers for the current workspace through official `grok inspect --json`, then combines capabilities reported by the active ACP session; supports refresh and explicit ACP reconnect, with no simulated browser records |
 | Model and reasoning profiles | Shows models, context windows, and reasoning efforts only from official ACP initialization metadata, then launches tasks through the official `--model` and `--reasoning-effort` arguments; tasks with saved conversation are never restarted silently |
@@ -72,7 +74,7 @@ The agent itself remains the official Grok Build CLI. GrokDesk focuses on the de
 | Command palette and cross-task search | Press `Ctrl+K` to search active and archived tasks in the current workspace across titles, conversations, attachment names, plans, and tools, or run navigation, task, workspace, and inspector commands |
 | Permissions and execution audit | Records redacted permission decisions, Grok tool lifecycles, and terminal command outcomes per workspace, with filters, search, and confirmed clearing; browser previews never generate simulated audit records |
 | Diagnostics and support reports | Runs real checks for GrokDesk, Runtime, OAuth, ACP, workspace/Git, and MCP, with actionable recovery links and a sanitized Markdown export; browser previews never invent health data |
-| Desktop shell | Single instance, resizable panes, collapsible inspector, Light/Dark/System themes, and a Windows desktop shortcut |
+| Desktop shell | Single instance, resizable panes, collapsible inspector, Light/Dark/System themes, a Windows desktop shortcut, and native macOS traffic-light window controls |
 
 ### Attachment boundaries
 
@@ -84,7 +86,15 @@ The agent itself remains the official Grok Build CLI. GrokDesk focuses on the de
 
 ## Install and first launch
 
-Windows users can download the latest installer from [GitHub Releases](https://github.com/Yueyuyu/grokdesk/releases). Installation automatically creates a GrokDesk desktop shortcut.
+Download the package for your platform from [GitHub Releases](https://github.com/Yueyuyu/grokdesk/releases):
+
+| Platform | Package | Notes |
+| --- | --- | --- |
+| Windows 10/11 x64 | `.exe` or `.msi` | Setup automatically creates a GrokDesk desktop shortcut |
+| macOS Apple Silicon | Apple Silicon / `aarch64` `.dmg` | For M1, M2, M3, M4, and later Apple chips |
+| macOS Intel | Intel / `x86_64` `.dmg` | For Intel Macs |
+
+Current macOS builds are unsigned and unnotarized. If Gatekeeper blocks the first launch, right-click GrokDesk in Finder and choose **Open**, or use **System Settings → Privacy & Security → Open Anyway**. Download only from this repository and verify the package against `SHA256SUMS.txt` from the same release.
 
 On first launch:
 
@@ -114,43 +124,44 @@ The native layer owns process lifecycle, ACP messaging, system-browser launch, R
 
 ### Requirements
 
-- Windows 10/11
+- Windows 10/11 or macOS 13+
 - Node.js 20+
-- Rust stable with the MSVC toolchain
-- Visual Studio 2022 Build Tools with **Desktop development with C++**
-- WebView2 Runtime
+- Rust stable
+- Windows: MSVC toolchain, Visual Studio 2022 Build Tools with **Desktop development with C++**, and WebView2 Runtime
+- macOS: Xcode Command Line Tools
 
 ### Run
 
-```powershell
+```bash
 npm ci
 npm run tauri:dev
 ```
 
 React-only browser preview:
 
-```powershell
+```bash
 npm run dev
 ```
 
-The browser preview explicitly labels simulated Runtime, sign-in, Tools, and attachment results. Local files, real accounts, and real ACP sessions are accessed only by the installed app or Tauri development build.
+The browser preview explicitly labels simulated Runtime, Tools, and attachment results. The Account page never creates simulated account, quota, or activity data. Local files, real accounts, and real ACP sessions are accessed only by the installed app or Tauri development build.
 
 ### Validate
 
-```powershell
+```bash
 npm test
 npm run build
 cargo check --manifest-path src-tauri/Cargo.toml
 npm run tauri:build
 ```
 
-Bundles are written to `src-tauri/target/release/bundle/`.
+Windows bundles are written to `src-tauri/target/release/bundle/`. On macOS, run `npm run tauri:build:mac-arm` or `npm run tauri:build:mac-intel` to produce the matching `.app` and `.dmg`.
 
 ## Privacy and security
 
 - OAuth credentials are stored and refreshed by the official Grok CLI.
 - GrokDesk does not read, display, or persist OAuth tokens.
-- Runtime installation runs `https://x.ai/cli/install.ps1` only after an explicit click.
+- Runtime installation runs an official script only after an explicit click: `https://x.ai/cli/install.ps1` on Windows or `https://x.ai/cli/install.sh` on macOS.
+- Account heatmaps and recent tasks aggregate only tasks, messages, and Tools saved for the current local workspace. They do not read OAuth tokens or claim to represent xAI account-wide usage.
 - ACP and Git operations are scoped to the folder the user explicitly selected.
 - The workspace terminal runs only commands explicitly entered by the user; raw output and structured test summaries stay in the current app session and are not written to task history.
 - Attachment content is encoded only for the current turn and is not stored in task history.
@@ -165,11 +176,11 @@ Bundles are written to `src-tauri/target/release/bundle/`.
 
 ## Current limits and roadmap
 
-- Windows is the priority platform; no official macOS or Linux bundle is available yet.
-- One-click Runtime installation is currently Windows-only.
+- macOS DMGs are currently unsigned and unnotarized, so first launch may require a manual Gatekeeper override; signing and notarization remain planned work.
+- No official Linux bundle or one-click Runtime installation is available yet.
 - Attachment support ultimately depends on the installed official Runtime's ACP capabilities.
 - Subscription and quota display depends on the official CLI's billing method.
-- The terminal currently runs non-interactive PowerShell commands rather than a full PTY/TTY session.
+- The terminal currently runs non-interactive PowerShell or shell commands rather than a full PTY/TTY session.
 - Skills are currently read-only in the Context inspector. The official CLI exposes discovery but no standalone Skills management command, so installation and updates remain owned by the containing Plugin.
 - Cross-device sync remains planned work.
 

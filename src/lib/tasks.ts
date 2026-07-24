@@ -122,6 +122,7 @@ const parseMessage = (value: unknown): ChatEntry | null => {
       120,
     ),
     time: safeString(candidate.time, "", 80),
+    createdAt: safeIsoDate(candidate.createdAt) ?? undefined,
     content: safeString(candidate.content),
     attachments: Array.isArray(candidate.attachments)
       ? candidate.attachments

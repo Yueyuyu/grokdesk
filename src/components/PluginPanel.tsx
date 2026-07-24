@@ -30,6 +30,7 @@ import {
   pluginComponentLabels,
   type PluginCatalogView,
 } from "../lib/extensions";
+import { detectAppPlatform, localPathExample } from "../lib/platform";
 import type { GrokPluginCatalog, GrokPluginSummary } from "../types";
 
 interface PluginPanelProps {
@@ -56,6 +57,10 @@ export function PluginPanel({
   connected,
   onOpenSettings,
 }: PluginPanelProps) {
+  const localPluginExample = localPathExample(
+    detectAppPlatform(),
+    "plugin",
+  );
   const [catalog, setCatalog] = useState<GrokPluginCatalog>(emptyCatalog);
   const [view, setView] = useState<PluginCatalogView>("installed");
   const [query, setQuery] = useState("");
@@ -379,7 +384,7 @@ export function PluginPanel({
                 <input
                   value={installSource}
                   onChange={(event) => setInstallSource(event.target.value)}
-                  placeholder="owner/repo、https://… 或 C:\\path\\plugin"
+                  placeholder={`owner/repo、https://… 或 ${localPluginExample}`}
                   autoFocus
                 />
               </label>

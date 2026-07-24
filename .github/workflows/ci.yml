@@ -10,31 +10,41 @@ permissions:
 
 jobs:
   verify:
-    runs-on: windows-latest
+    name: Verify ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: 检出代码
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 安装 Node.js
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: 安装 Rust
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
 
-      - name: 安装前端依赖
+      - name: Install frontend dependencies
         run: npm ci
 
-      - name: 运行前端测试
+      - name: Run frontend tests
         run: npm test
 
-      - name: 构建前端
+      - name: Build frontend
         run: npm run build
 
-      - name: 检查 Tauri 原生端
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Check Tauri native code
         run: cargo check --manifest-path src-tauri/Cargo.toml
 
-      - name: 运行 Tauri 原生端测试
+      - name: Run Tauri native tests
         run: cargo test --manifest-path src-tauri/Cargo.toml

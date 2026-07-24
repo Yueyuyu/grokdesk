@@ -71,7 +71,8 @@
 ## Core interaction inventory
 
 - Workspace selector and native folder picker.
-- Tasks, Permissions, Diagnostics, Plugins, MCP, and Settings navigation.
+- Tasks, Permissions, Diagnostics, Plugins, MCP, Account, and Settings navigation.
+- Account surface backed by official ACP billing metadata when available, with explicit unsupported states, official OAuth/subscription actions, and a workspace-local 12-month activity heatmap plus recent-task table that never claims to be xAI account-wide usage.
 - Task rename/delete, archive/restore, local branching with a fresh ACP session, and validated JSON import/export.
 - `Ctrl+K` command palette for local cross-task search, navigation, task creation, workspace selection, and inspector commands.
 - Local permission and execution audit for redacted permission decisions, Grok tool lifecycles, and workspace-command outcomes, with filtering, search, retention disclosure, and confirmed clearing.
@@ -86,6 +87,8 @@
 - Composer input, send, cancel, attach, mention, and branch selection controls.
 - Real Grok binary detection, official OAuth launch, ACP session start, streamed session updates, permission response, and cancellation.
 - Up to four task-scoped official ACP clients with serialized process initialization, concurrent turns, idle-only LRU release, background completion/permission indicators, actionable in-app notifications, and Windows taskbar attention.
+- Windows x64 and macOS Apple Silicon/Intel release targets. macOS uses native traffic-light controls, the official `grok` binary under `~/.grok/bin`, `grok login --oauth`, `grok agent stdio`, the user shell for workspace commands, and `.app`/`.dmg` bundles.
+- Browser Account previews remain read-only: they expose no simulated login, subscription, quota, heatmap, or recent-task data.
 - Light/dark/system theme selection with shared layout and component geometry.
 
 ## Media treatment

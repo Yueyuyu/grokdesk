@@ -5,61 +5,150 @@ on:
     tags:
       - "v*"
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
 jobs:
   windows:
-    name: 构建并发布 Windows 安装包
+    name: Build Windows x64
     runs-on: windows-latest
     steps:
-      - name: 检出代码
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 安装 Node.js
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: 安装 Rust
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: 安装前端依赖
+      - name: Install frontend dependencies
         run: npm ci
 
-      - name: 运行测试
+      - name: Run tests
         run: npm test
 
-      - name: 运行 Tauri 原生端测试
+      - name: Run native tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
-      - name: 构建 NSIS 与 MSI 安装包
+      - name: Build NSIS and MSI installers
         run: npm run tauri:build
 
-      - name: 生成校验文件并发布 Release
+      - name: Collect Windows installers
         shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release-assets -Force | Out-Null
+          $assets = Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -File |
+            Where-Object { $_.Extension -in ".exe", ".msi" }
+          if (-not $assets) {
+            throw "No Windows installer was produced."
+          }
+          $assets | Copy-Item -Destination release-assets
+
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: grokdesk-windows-x64
+          path: release-assets/*
+          if-no-files-found: error
+
+  macos:
+    name: Build macOS ${{ matrix.label }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Apple-Silicon
+            target: aarch64-apple-darwin
+          - label: Intel
+            target: x86_64-apple-darwin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Run native tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build macOS app and DMG
+        run: npm run tauri:build -- --target "${{ matrix.target }}" --bundles app,dmg
+
+      - name: Collect macOS DMG
+        run: |
+          mkdir -p release-assets
+          find "src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -maxdepth 1 -type f -name '*.dmg' -exec cp {} release-assets/ \;
+          test -n "$(find release-assets -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+
+      - name: Upload macOS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: grokdesk-macos-${{ matrix.label }}
+          path: release-assets/*.dmg
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          test "$GITHUB_REF_NAME" = "$expected" || {
+            echo "Tag $GITHUB_REF_NAME does not match package version $expected."
+            exit 1
+          }
+
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate SHA256 checksums
+        shell: bash
+        run: |
+          cd release-assets
+          find . -maxdepth 1 -type f \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' \) -printf '%f\n' |
+            sort |
+            xargs sha256sum > SHA256SUMS.txt
+          test -s SHA256SUMS.txt
+
+      - name: Create public release
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $assetPaths = Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -File |
-            Where-Object { $_.Extension -in ".exe", ".msi" } |
-            Select-Object -ExpandProperty FullName
-
-          if (-not $assetPaths) {
-            throw "未找到 Windows 安装包"
-          }
-
-          $checksumPath = Join-Path $env:RUNNER_TEMP "SHA256SUMS.txt"
-          $assetPaths |
-            ForEach-Object {
-              $hash = (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant()
-              "$hash  $(Split-Path -Leaf $_)"
-            } |
-            Set-Content -LiteralPath $checksumPath -Encoding utf8
-
-          $releaseAssets = @($assetPaths) + @($checksumPath)
-          gh release create $env:GITHUB_REF_NAME @releaseAssets `
-            --title "GrokDesk $env:GITHUB_REF_NAME" `
-            --generate-notes `
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --title "GrokDesk $GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes "Windows x64 and macOS Apple Silicon/Intel installers are attached. macOS builds are currently unsigned and unnotarized, so Gatekeeper may require Finder → Open or System Settings → Privacy & Security → Open Anyway. Verify downloads with SHA256SUMS.txt." \
             --verify-tag

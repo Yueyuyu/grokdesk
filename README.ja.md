@@ -4,7 +4,7 @@
 
 <h1 align="center">GrokDesk</h1>
 
-<p align="center">公式 Grok Build を、見やすくレビュー可能な Windows デスクトップ・ワークスペースへ。</p>
+<p align="center">公式 Grok Build を、見やすくレビュー可能な Windows / macOS デスクトップ・ワークスペースへ。</p>
 
 <p align="center">
   <a href="README.md">简体中文</a> ·
@@ -39,6 +39,7 @@
   <img alt="Rust" src="https://img.shields.io/badge/Rust-native-000000?style=flat-square&amp;logo=rust&amp;logoColor=white" />
   <img alt="ACP" src="https://img.shields.io/badge/Protocol-ACP-7C3AED?style=flat-square" />
   <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square&amp;logo=windows11&amp;logoColor=white" />
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-000000?style=flat-square&amp;logo=apple&amp;logoColor=white" />
 </p>
 
 > [!IMPORTANT]
@@ -61,9 +62,10 @@ Agent 本体には公式 Grok Build CLI をそのまま使用します。GrokDes
 | 固定 Tools ドック | Tools は入力欄の上に固定され、直近5件を表示。必要に応じて全件を展開できます |
 | ファイルと画像 | 複数選択、ドラッグ＆ドロップ、プレビュー、削除、添付のみの送信に対応。ACP の image/resource として実際に送信 |
 | ワークスペースレビュー | 明示的なフォルダー選択、実 Git ステータスと Unified Diff、ファイル単位の stage/unstage、確認付き revert |
-| 実ワークスペースターミナル | 選択したプロジェクトで PowerShell を実行し、stdout/stderr、コマンド履歴、プロセスツリー停止、独立した ACP ログ表示に対応 |
+| 実ワークスペースターミナル | 選択したプロジェクトで Windows PowerShell または macOS のユーザー Shell を実行し、stdout/stderr、コマンド履歴、プロセスツリー停止、独立した ACP ログ表示に対応 |
 | バックグラウンドターミナルとテスト結果 | 最大8個の独立ターミナルタブを並列実行し、作成・名前変更・終了・タブ単位の停止に対応。実際の Vitest、Cargo、Jest、Node 出力から成功数、失敗数、所要時間を抽出 |
-| Runtime とログイン | 公式 Grok Runtime のワンクリック導入と `grok login --oauth` による認証 |
+| Runtime とログイン | Windows / macOS で公式 Grok Runtime をワンクリック導入し、`grok login --oauth` で認証 |
+| アカウントとローカル活動 | 専用 Account 画面には公式 Runtime が実際に返したプラン、クォータ、期間だけを表示し、現在のワークスペースの活動ヒートマップと最近のタスクを xAI アカウント全体の使用量と明確に区別 |
 | Plugins と MCP | 公式 Runtime が公開する実際の Plugin、Marketplace、MCP 設定を表示・管理 |
 | Runtime コンテキストと Skills | 公式 `grok inspect --json` から現在のワークスペースのプロジェクト指示、Skills、Agents、設定レイヤーを読み取り、アクティブな ACP セッションが報告する機能を組み合わせます。更新と明示的な ACP 再接続に対応し、ブラウザでは記録を模擬しません |
 | モデルと推論プロファイル | 公式 ACP 初期化メタデータだけからモデル、コンテキストウィンドウ、推論強度を表示し、公式の `--model` と `--reasoning-effort` 引数でタスクを起動します。保存済み会話があるタスクを暗黙に再起動しません |
@@ -72,7 +74,7 @@ Agent 本体には公式 Grok Build CLI をそのまま使用します。GrokDes
 | コマンドパレットとタスク横断検索 | `Ctrl+K` で現在のワークスペース内の通常/アーカイブ済みタスクをタイトル、会話、添付名、プラン、Tools から検索し、ナビゲーション、タスク、ワークスペース、インスペクターのコマンドを実行 |
 | 権限センターと実行監査 | ワークスペース単位で、マスキング済みの権限判断、Grok ツールのライフサイクル、ターミナルコマンドの結果を記録。フィルター、検索、確認付き削除に対応し、ブラウザプレビューでは監査記録を模擬生成しません |
 | 診断センターとサポートレポート | GrokDesk、Runtime、OAuth、ACP、ワークスペース/Git、MCP を実際に確認し、実行可能な修復導線とマスキング済み Markdown レポートを提供。ブラウザプレビューでは健康状態を模擬しません |
-| デスクトップシェル | 単一インスタンス、幅調整可能な3ペイン、折りたたみ可能なインスペクター、Light/Dark/System テーマ、デスクトップショートカット |
+| デスクトップシェル | 単一インスタンス、幅調整可能な3ペイン、折りたたみ可能なインスペクター、Light/Dark/System テーマ、Windows デスクトップショートカット、macOS ネイティブの信号ボタン |
 
 ### 添付ファイルの制限
 
@@ -84,7 +86,15 @@ Agent 本体には公式 Grok Build CLI をそのまま使用します。GrokDes
 
 ## インストールと初回起動
 
-Windows 版は [GitHub Releases](https://github.com/Yueyuyu/grokdesk/releases) からダウンロードできます。インストール時に GrokDesk のデスクトップショートカットが自動作成されます。
+[GitHub Releases](https://github.com/Yueyuyu/grokdesk/releases) から環境に合うパッケージをダウンロードしてください。
+
+| プラットフォーム | パッケージ | 説明 |
+| --- | --- | --- |
+| Windows 10/11 x64 | `.exe` または `.msi` | インストール時に GrokDesk のデスクトップショートカットを自動作成 |
+| macOS Apple Silicon | Apple Silicon / `aarch64` `.dmg` | M1、M2、M3、M4 以降の Apple チップ向け |
+| macOS Intel | Intel / `x86_64` `.dmg` | Intel Mac 向け |
+
+現在の macOS ビルドは未署名・未公証です。初回起動が Gatekeeper に遮断された場合は Finder で GrokDesk を右クリックして **開く** を選ぶか、**システム設定 → プライバシーとセキュリティ → このまま開く** を使用してください。本リポジトリの Release だけから取得し、同じ Release の `SHA256SUMS.txt` で検証してください。
 
 初回起動時：
 
@@ -114,43 +124,44 @@ flowchart LR
 
 ### 必要環境
 
-- Windows 10/11
+- Windows 10/11 または macOS 13+
 - Node.js 20+
-- Rust stable（MSVC toolchain）
-- Visual Studio 2022 Build Tools の **Desktop development with C++**
-- WebView2 Runtime
+- Rust stable
+- Windows：MSVC toolchain、Visual Studio 2022 Build Tools の **Desktop development with C++**、WebView2 Runtime
+- macOS：Xcode Command Line Tools
 
 ### 起動
 
-```powershell
+```bash
 npm ci
 npm run tauri:dev
 ```
 
 React UI のみをブラウザで確認する場合：
 
-```powershell
+```bash
 npm run dev
 ```
 
-ブラウザプレビューでは Runtime、ログイン、Tools、添付結果がシミュレーションであることを明示します。実ファイル、実アカウント、実 ACP へアクセスするのはインストール版または Tauri 開発版のみです。
+ブラウザプレビューでは Runtime、Tools、添付結果がシミュレーションであることを明示します。Account 画面は架空のアカウント、クォータ、活動データを生成しません。実ファイル、実アカウント、実 ACP へアクセスするのはインストール版または Tauri 開発版のみです。
 
 ### 検証
 
-```powershell
+```bash
 npm test
 npm run build
 cargo check --manifest-path src-tauri/Cargo.toml
 npm run tauri:build
 ```
 
-生成物は `src-tauri/target/release/bundle/` に出力されます。
+Windows の生成物は `src-tauri/target/release/bundle/` に出力されます。macOS では `npm run tauri:build:mac-arm` または `npm run tauri:build:mac-intel` で対応する `.app` と `.dmg` を生成できます。
 
 ## プライバシーと安全性
 
 - OAuth 資格情報は公式 Grok CLI が保存・更新します。
 - GrokDesk は OAuth Token を読み取り、表示、永続化しません。
-- Runtime の導入は、ユーザーの明示操作後にのみ公式 `https://x.ai/cli/install.ps1` を実行します。
+- Runtime の導入は明示的なクリック後にのみ公式スクリプトを実行します。Windows は `https://x.ai/cli/install.ps1`、macOS は `https://x.ai/cli/install.sh` を使用します。
+- Account のヒートマップと最近のタスクは、現在のローカルワークスペースに保存されたタスク、メッセージ、Tools だけを集計します。OAuth Token を読まず、xAI アカウント全体の使用量とは称しません。
 - ACP と Git 操作は、ユーザーが選んだフォルダーに限定されます。
 - ワークスペースターミナルはユーザーが明示的に入力したコマンドだけを実行し、生の出力と構造化テスト概要は現在のアプリセッション内にのみ保持されます。
 - 添付内容は現在の送信ターンでのみエンコードされ、タスク履歴には保存されません。
@@ -165,11 +176,11 @@ npm run tauri:build
 
 ## 現在の制限とロードマップ
 
-- 現在は Windows を優先しており、macOS/Linux の正式パッケージはまだありません。
-- Runtime のワンクリック導入は Windows のみです。
+- macOS DMG は現在未署名・未公証のため、初回起動に Gatekeeper の手動許可が必要な場合があります。署名と公証は今後の対応です。
+- Linux の正式パッケージと Runtime のワンクリック導入はまだありません。
 - 添付対応は、インストール済みの公式 Runtime が公開する ACP 機能に依存します。
 - 契約プランと利用量は、公式 CLI の billing メソッドに依存します。
-- ターミナルは現在、完全な PTY/TTY セッションではなく非対話型 PowerShell コマンドを実行します。
+- ターミナルは現在、完全な PTY/TTY セッションではなく非対話型 PowerShell / Shell コマンドを実行します。
 - Skills は現在 Context Inspector で読み取り専用です。公式 CLI は検出結果を公開しますが独立した Skills 管理コマンドはないため、導入と更新は所属 Plugin から行います。
 - デバイス間同期は今後の予定です。
 

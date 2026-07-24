@@ -26,6 +26,11 @@ import {
   getPreviewWorkspaceSnapshot,
 } from "./workspace";
 import { MAX_TASK_EXCHANGE_BYTES } from "./taskExchange";
+import {
+  detectAppPlatform,
+  grokAuthFileHint,
+  grokExecutableHint,
+} from "./platform";
 
 const PREVIEW_RUNTIME_KEY = "grokdesk.preview.runtime-installed";
 const PREVIEW_AUTH_KEY = "grokdesk.preview.oauth-complete";
@@ -54,9 +59,13 @@ function previewRuntimeStatus(): RuntimeStatus {
   return {
     available,
     authenticationState: authenticated ? "verified" : "missing",
-    executablePath: available ? "%USERPROFILE%\\.grok\\bin\\grok.exe" : null,
+    executablePath: available
+      ? grokExecutableHint(detectAppPlatform())
+      : null,
     version: available ? "grok 0.2.93 · preview simulation" : null,
-    authFilePath: authenticated ? "%USERPROFILE%\\.grok\\auth.json" : null,
+    authFilePath: authenticated
+      ? grokAuthFileHint(detectAppPlatform())
+      : null,
   };
 }
 

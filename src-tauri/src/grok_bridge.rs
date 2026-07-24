@@ -1323,10 +1323,89 @@ pub async fn start_oauth_login(app: AppHandle) -> Result<OAuthResult, String> {
 
 #[tauri::command]
 pub async fn install_grok_cli(app: AppHandle) -> Result<RuntimeStatus, String> {
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     {
-        let _ = app;
-        Err("One-click Grok Runtime installation currently supports Windows only.".to_string())
+        let _ = app.emit("grok://status", "Installing official Grok Runtime…");
+        let _ = app.emit(
+            "grok://install-log",
+            "[setup] Downloading the official installer from https://x.ai/cli/install.sh",
+        );
+
+        let mut command = Command::new("/bin/bash");
+        command
+            .args([
+                "-lc",
+                "set -o pipefail; /usr/bin/curl -fsSL https://x.ai/cli/install.sh | /bin/bash",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+
+        let mut child = command
+            .spawn()
+            .map_err(|error| format!("Failed to start the official Grok installer: {error}"))?;
+
+        let stdout_task = child.stdout.take().map(|stdout| {
+            let app = app.clone();
+            tokio::spawn(async move {
+                let mut lines = BufReader::new(stdout).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    let _ = app.emit("grok://install-log", line);
+                }
+            })
+        });
+        let stderr_task = child.stderr.take().map(|stderr| {
+            let app = app.clone();
+            tokio::spawn(async move {
+                let mut lines = BufReader::new(stderr).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    let _ = app.emit("grok://install-log", line);
+                }
+            })
+        });
+
+        let status = child
+            .wait()
+            .await
+            .map_err(|error| format!("The official Grok installer could not finish: {error}"))?;
+        if let Some(task) = stdout_task {
+            let _ = task.await;
+        }
+        if let Some(task) = stderr_task {
+            let _ = task.await;
+        }
+
+        if !status.success() {
+            let _ = app.emit("grok://status", "Grok Runtime installation failed");
+            return Err(format!(
+                "The official Grok installer exited with status {status}."
+            ));
+        }
+
+        let runtime = detect_runtime();
+        if !runtime.available {
+            let _ = app.emit(
+                "grok://status",
+                "Grok Runtime was not detected after installation",
+            );
+            return Err(
+                "The installer completed, but GrokDesk could not find ~/.grok/bin/grok."
+                    .to_string(),
+            );
+        }
+
+        let _ = app.emit(
+            "grok://install-log",
+            "[setup] Official Grok Runtime is ready.",
+        );
+        let status = if runtime.authentication_state == "configured" {
+            "Grok Build · OAuth configured"
+        } else {
+            "Grok Build · Sign in required"
+        };
+        let _ = app.emit("grok://status", status);
+        Ok(runtime)
     }
 
     #[cfg(windows)]
@@ -1418,6 +1497,12 @@ pub async fn install_grok_cli(app: AppHandle) -> Result<RuntimeStatus, String> {
         };
         let _ = app.emit("grok://status", status);
         Ok(runtime)
+    }
+
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    {
+        let _ = app;
+        Err("One-click Grok Runtime installation currently supports Windows and macOS.".to_string())
     }
 }
 

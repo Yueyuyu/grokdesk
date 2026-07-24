@@ -1,6 +1,6 @@
 {
   "name": "grokdesk",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "private": true,
   "description": "A polished native desktop client for Grok Build over ACP.",
   "type": "module",
@@ -12,7 +12,9 @@
     "test:watch": "vitest",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "tauri:build:mac-arm": "tauri build --target aarch64-apple-darwin --bundles app,dmg",
+    "tauri:build:mac-intel": "tauri build --target x86_64-apple-darwin --bundles app,dmg"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",

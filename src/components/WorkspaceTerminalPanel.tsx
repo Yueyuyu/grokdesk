@@ -13,6 +13,10 @@ import type {
   WorkspaceTerminalController,
   WorkspaceTerminalTab,
 } from "../hooks/useWorkspaceTerminal";
+import {
+  detectAppPlatform,
+  workspaceShellPresentation,
+} from "../lib/platform";
 
 const quickCommands = [
   { label: "Git status", command: "git status --short" },
@@ -37,6 +41,7 @@ export function WorkspaceTerminalPanel({
   workspaceReady,
   preview,
 }: WorkspaceTerminalPanelProps) {
+  const shell = workspaceShellPresentation(detectAppPlatform());
   const [source, setSource] = useState<"workspace" | "acp">("workspace");
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -224,7 +229,7 @@ export function WorkspaceTerminalPanel({
                 {preview
                   ? "Browser preview is read-only. Open the installed app to run workspace commands."
                   : workspaceReady
-                    ? "Run a PowerShell command in this terminal. You can keep it running while opening another task or terminal. Output is not saved."
+                    ? `Run a ${shell.commandNoun} in this terminal. You can keep it running while opening another task or terminal. Output is not saved.`
                     : "Choose a workspace to enable the terminal."}
               </div>
             )}
@@ -236,7 +241,7 @@ export function WorkspaceTerminalPanel({
               void terminal.run();
             }}
           >
-            <span aria-hidden="true">PS&gt;</span>
+            <span aria-hidden="true">{shell.prompt}</span>
             <input
               value={terminal.draft}
               disabled={commandDisabled}
@@ -248,13 +253,16 @@ export function WorkspaceTerminalPanel({
                 } else if (event.key === "ArrowDown") {
                   event.preventDefault();
                   terminal.recallHistory("newer");
-                } else if (event.key === "Enter" && event.ctrlKey) {
+                } else if (
+                  event.key === "Enter" &&
+                  (event.ctrlKey || event.metaKey)
+                ) {
                   event.preventDefault();
                   void terminal.run();
                 }
               }}
-              placeholder={workspaceReady ? "Enter a PowerShell command" : "Choose a workspace first"}
-              aria-label="Workspace PowerShell command"
+              placeholder={workspaceReady ? shell.placeholder : "Choose a workspace first"}
+              aria-label={`Workspace ${shell.commandNoun}`}
               spellCheck={false}
             />
             {terminal.activeTabRunning ? (
@@ -287,7 +295,7 @@ export function WorkspaceTerminalPanel({
                 ? "Desktop-only execution"
                 : terminal.runningCount > 0
                   ? `${terminal.runningCount} background command${terminal.runningCount === 1 ? "" : "s"}`
-                  : "PowerShell · user initiated"}
+                  : `${shell.name} · user initiated`}
             </span>
             <span>{workspacePath || "No workspace selected"}</span>
           </footer>

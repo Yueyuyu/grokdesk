@@ -482,9 +482,10 @@ export function Sidebar({
       <div className="sidebar__bottom">
         <button
           type="button"
-          className="profile-row"
-          onClick={() => onNavigate("settings")}
-          aria-label="Open Grok account settings"
+          className={`profile-row ${active === "account" ? "is-active" : ""}`}
+          onClick={() => onNavigate("account")}
+          aria-label="Open Grok account"
+          aria-current={active === "account" ? "page" : undefined}
         >
           <img src={appIcon} alt="" />
           <span>

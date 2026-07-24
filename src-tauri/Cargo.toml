@@ -1,6 +1,6 @@
 [package]
 name = "grokdesk"
-version = "0.2.7"
+version = "0.2.8"
 description = "A native desktop workspace for Grok Build over ACP"
 authors = ["GrokDesk contributors"]
 edition = "2021"
@@ -26,3 +26,6 @@ which = "7"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

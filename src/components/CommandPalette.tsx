@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   SidebarSimple,
   TerminalWindow,
+  UserCircle,
   X,
 } from "@phosphor-icons/react";
 import {
@@ -154,10 +155,19 @@ export function CommandPalette({
         run: () => onNavigate("mcp"),
       },
       {
+        id: "navigate-account",
+        label: "Open Account",
+        detail: "Official login, subscription, and local GrokDesk activity",
+        keywords: "profile oauth quota usage heatmap",
+        icon: <UserCircle size={17} />,
+        featured: true,
+        run: () => onNavigate("account"),
+      },
+      {
         id: "navigate-settings",
         label: "Open Settings",
-        detail: "Runtime, account, subscription, and appearance",
-        keywords: "preferences theme account",
+        detail: "Runtime, model, workspace, and appearance",
+        keywords: "preferences theme model runtime",
         icon: <GearSix size={17} />,
         featured: true,
         run: () => onNavigate("settings"),

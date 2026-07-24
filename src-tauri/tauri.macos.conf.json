@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "GrokDesk",
+        "width": 1440,
+        "height": 1024,
+        "minWidth": 980,
+        "minHeight": 680,
+        "center": true,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 16,
+          "y": 14
+        },
+        "dragDropEnabled": false,
+        "resizable": true,
+        "transparent": false,
+        "shadow": true
+      }
+    ],
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "targets": [
+      "app",
+      "dmg"
+    ]
+  }
+}

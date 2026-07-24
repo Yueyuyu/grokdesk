@@ -99,6 +99,15 @@
 .window-controls button:hover { background: var(--bg-hover); }
 .window-controls .window-controls__close:hover { background: #c42b1c; color: #fff; }
 
+html[data-platform="macos"] .titlebar {
+  grid-template-columns: auto 1fr auto;
+  padding-left: 72px;
+}
+
+html[data-platform="macos"] .titlebar__brand {
+  min-width: max(0px, calc(var(--sidebar-width, 268px) - 72px));
+}
+
 .app-grid {
   position: relative;
   display: grid;

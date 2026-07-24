@@ -98,6 +98,7 @@ const parseMessage = (value: unknown): ChatEntry | null => {
     (candidate.role !== "user" && candidate.role !== "agent") ||
     !isStringWithin(candidate.name, 120) ||
     !isStringWithin(candidate.time, 80) ||
+    (candidate.createdAt !== undefined && !isIsoDate(candidate.createdAt)) ||
     !isStringWithin(candidate.content, MAX_TEXT_LENGTH) ||
     (candidate.streaming !== undefined && typeof candidate.streaming !== "boolean")
   ) {
@@ -118,6 +119,10 @@ const parseMessage = (value: unknown): ChatEntry | null => {
     role: candidate.role,
     name: candidate.name as string,
     time: candidate.time as string,
+    createdAt:
+      typeof candidate.createdAt === "string"
+        ? candidate.createdAt
+        : undefined,
     content: candidate.content as string,
     attachments,
     streaming: false,
@@ -221,6 +226,7 @@ export function serializeTaskExport(
         role: message.role,
         name: message.name,
         time: message.time,
+        createdAt: message.createdAt,
         content: message.content,
         attachments: message.attachments?.map((attachment) => ({
           name: attachment.name,

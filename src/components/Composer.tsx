@@ -19,6 +19,7 @@ import {
   preparePromptAttachments,
   validateAttachmentSelection,
 } from "../lib/attachments";
+import { detectAppPlatform, sendShortcut } from "../lib/platform";
 import type { PromptAttachment } from "../types";
 
 interface ComposerProps {
@@ -55,6 +56,7 @@ export function Composer({
   const dragDepth = useRef(0);
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
+  const keyboardShortcut = sendShortcut(detectAppPlatform());
 
   useEffect(
     () => () => {
@@ -235,7 +237,9 @@ export function Composer({
           >
             <Plus size={17} weight="bold" />
           </button>
-          <span className="keyboard-hint">Add or drop files · Ctrl Enter to send</span>
+          <span className="keyboard-hint">
+            Add or drop files · {keyboardShortcut} to send
+          </span>
         </div>
         <div className="composer__actions">
           {busy ? (

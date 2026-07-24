@@ -20,6 +20,7 @@ import {
   removeGrokMcpServer,
 } from "../lib/desktop";
 import { isValidMcpName, parseMcpArgumentLines } from "../lib/extensions";
+import { detectAppPlatform, localPathExample } from "../lib/platform";
 import { isWorkspaceSelected } from "../lib/workspace";
 import type {
   AddMcpServerInput,
@@ -63,6 +64,7 @@ export function McpPanel({
   connected,
   onOpenSettings,
 }: McpPanelProps) {
+  const localProjectExample = localPathExample(detectAppPlatform());
   const workspaceReady = isWorkspaceSelected(workspacePath);
   const [catalog, setCatalog] = useState<GrokMcpCatalog>(emptyCatalog);
   const [loading, setLoading] = useState(false);
@@ -371,7 +373,7 @@ export function McpPanel({
                     rows={4}
                     value={draft.argumentLines}
                     onChange={(event) => setDraft((current) => ({ ...current, argumentLines: event.target.value }))}
-                    placeholder={"-y\n@modelcontextprotocol/server-filesystem\nC:\\Projects"}
+                    placeholder={`-y\n@modelcontextprotocol/server-filesystem\n${localProjectExample}`}
                   />
                 </label>
               ) : null}
