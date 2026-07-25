@@ -12,6 +12,7 @@ import {
   shouldReuseTaskSession,
   type TaskSessionStatus,
 } from "../lib/backgroundRuntime";
+import { normalizePreviewMarkdownChunks } from "../lib/localizedRuntimeUi";
 import {
   answerClientRequest,
   cancelAcpTurn,
@@ -768,7 +769,7 @@ export function useGrokRuntime(
 
   const runBrowserDemo = useCallback(
     async (taskId: string, prompt: string, attachmentCount: number) => {
-      const response = [
+      const response = normalizePreviewMarkdownChunks([
         t("runtime.preview.heading"),
         t("runtime.preview.saved"),
         attachmentCount > 0
@@ -784,7 +785,7 @@ export function useGrokRuntime(
               prompt: `${prompt.slice(0, 80)}${prompt.length > 80 ? "…" : ""}`,
             })
           : t("runtime.preview.attachmentsOnly"),
-      ];
+      ]);
       const previewTools = [
         ["Read", t("runtime.preview.tool.noFilesRead")],
         ["Update", t("runtime.preview.tool.noFilesChanged")],

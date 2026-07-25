@@ -319,7 +319,7 @@ const zhCN = {
   "runtime.preview.attachments": "- **附件：** 已选择 {count} 个用于界面测试；未发送或上传文件内容。",
   "runtime.preview.attachmentsOnly": "> 当前预览请求仅包含附件。",
   "runtime.preview.currentRequest": "> 当前预览请求：“{prompt}”",
-  "runtime.preview.desktopBehavior": "- **桌面行为：**已安装应用会通过官方 `Grok Build ACP` 会话发送提示。",
+  "runtime.preview.desktopBehavior": "- **桌面行为：** 已安装应用会通过官方 `Grok Build ACP` 会话发送提示。",
   "runtime.preview.heading": "### 浏览器预览",
   "runtime.preview.installSimulation": "[预览] 模拟官方 Grok Runtime 安装程序。未更改任何软件。",
   "runtime.preview.noCommand": "```text\nNo command was executed in browser preview.\n```",

@@ -51,3 +51,10 @@ export function isFallbackPlanUpdate(detail: string) {
 export function isFallbackRuntimeTool(target: string) {
   return target.trim() === "Grok Build tool";
 }
+
+export function normalizePreviewMarkdownChunks(chunks: string[]) {
+  return chunks
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk, index) => (index === 0 ? chunk : `\n\n${chunk}`));
+}
