@@ -14,6 +14,11 @@ export const LEGACY_TASK_STORE_KEY = "grokdesk.tasks.v1";
 export const TASK_STORE_VERSION = 2;
 export const NEW_TASK_TITLE = "New task";
 
+export const localizeTaskTitle = (
+  title: string,
+  localizedNewTaskTitle: string,
+) => (title === NEW_TASK_TITLE ? localizedNewTaskTitle : title);
+
 export const MAX_TASKS = 200;
 const MAX_MESSAGES_PER_TASK = 500;
 const MAX_PLAN_STEPS = 200;
@@ -25,6 +30,13 @@ export interface TaskStoreSnapshot {
   version: typeof TASK_STORE_VERSION;
   tasks: GrokTask[];
   activeTaskIds: Record<string, string>;
+}
+
+export interface TaskStoreParseResult {
+  valid: boolean;
+  snapshot: TaskStoreSnapshot;
+  error: string | null;
+  sourceVersion: number | null;
 }
 
 export interface TaskGroup {
@@ -240,28 +252,56 @@ export const emptyTaskStore = (): TaskStoreSnapshot => ({
   activeTaskIds: {},
 });
 
-export function parseTaskStore(raw: string | null): TaskStoreSnapshot {
-  if (!raw) return emptyTaskStore();
-
+export function parseTaskStoreResult(raw: string | null): TaskStoreParseResult {
+  if (!raw) {
+    return {
+      valid: true,
+      snapshot: emptyTaskStore(),
+      error: null,
+      sourceVersion: null,
+    };
+  }
   try {
     const candidate = JSON.parse(raw) as Record<string, unknown>;
     if (
       !candidate ||
       (candidate.version !== 1 && candidate.version !== TASK_STORE_VERSION) ||
-      !Array.isArray(candidate.tasks)
+      !Array.isArray(candidate.tasks) ||
+      !candidate.activeTaskIds ||
+      typeof candidate.activeTaskIds !== "object"
     ) {
-      return emptyTaskStore();
+      return {
+        valid: false,
+        snapshot: emptyTaskStore(),
+        error: "Task history uses an unsupported or incomplete schema.",
+        sourceVersion:
+          typeof candidate?.version === "number" ? candidate.version : null,
+      };
+    }
+    if (candidate.tasks.length > MAX_TASKS) {
+      return {
+        valid: false,
+        snapshot: emptyTaskStore(),
+        error: `Task history contains more than the ${MAX_TASKS} supported tasks.`,
+        sourceVersion: candidate.version as number,
+      };
     }
 
     const ids = new Set<string>();
-    const tasks = candidate.tasks
-      .map(parseTask)
-      .filter((task): task is GrokTask => {
-        if (!task || ids.has(task.id)) return false;
-        ids.add(task.id);
-        return true;
-      })
-      .slice(0, MAX_TASKS);
+    const tasks: GrokTask[] = [];
+    for (const value of candidate.tasks) {
+      const task = parseTask(value);
+      if (!task || ids.has(task.id)) {
+        return {
+          valid: false,
+          snapshot: emptyTaskStore(),
+          error: "Task history contains a malformed or duplicate task.",
+          sourceVersion: candidate.version as number,
+        };
+      }
+      ids.add(task.id);
+      tasks.push(task);
+    }
     const activeIds = new Set(
       tasks.filter((task) => !task.archivedAt).map((task) => task.id),
     );
@@ -277,14 +317,32 @@ export function parseTaskStore(raw: string | null): TaskStoreSnapshot {
       ),
     );
 
-    return { version: TASK_STORE_VERSION, tasks, activeTaskIds };
+    return {
+      valid: true,
+      snapshot: { version: TASK_STORE_VERSION, tasks, activeTaskIds },
+      error: null,
+      sourceVersion: candidate.version as number,
+    };
   } catch {
-    return emptyTaskStore();
+    return {
+      valid: false,
+      snapshot: emptyTaskStore(),
+      error: "Task history is not valid JSON.",
+      sourceVersion: null,
+    };
   }
+}
+
+export function parseTaskStore(raw: string | null): TaskStoreSnapshot {
+  const parsed = parseTaskStoreResult(raw);
+  return parsed.valid ? parsed.snapshot : emptyTaskStore();
 }
 
 export const serializeTaskStore = (snapshot: TaskStoreSnapshot) =>
   JSON.stringify(snapshot);
+
+export const hasTaskCapacity = (snapshot: TaskStoreSnapshot) =>
+  snapshot.tasks.length < MAX_TASKS;
 
 export function workspaceStorageKey(workspacePath: string) {
   const normalized = (workspacePath.trim() || ".").replaceAll("/", "\\");
@@ -384,7 +442,7 @@ export function deleteTask(
       id: options.replacementId,
       now: options.now,
     });
-    tasks = [replacement, ...tasks].slice(0, MAX_TASKS);
+    tasks = [replacement, ...tasks];
     workspaceTasks = [replacement];
   }
 
@@ -430,9 +488,10 @@ export function ensureWorkspaceTask(
   }
 
   const task = createTask(workspacePath, options);
+  if (!hasTaskCapacity(snapshot)) return snapshot;
   return {
     ...snapshot,
-    tasks: [task, ...snapshot.tasks].slice(0, MAX_TASKS),
+    tasks: [task, ...snapshot.tasks],
     activeTaskIds: { ...snapshot.activeTaskIds, [key]: task.id },
   };
 }
@@ -472,6 +531,18 @@ export function archiveTask(
 ) {
   const workspaceKey = workspaceStorageKey(workspacePath);
   const timestamp = (options.now ?? new Date()).toISOString();
+  const activeWorkspaceTasks = snapshot.tasks.filter(
+    (task) =>
+      workspaceStorageKey(task.workspacePath) === workspaceKey &&
+      !task.archivedAt,
+  );
+  if (
+    activeWorkspaceTasks.length === 1 &&
+    activeWorkspaceTasks[0]?.id === taskId &&
+    !hasTaskCapacity(snapshot)
+  ) {
+    return snapshot;
+  }
   let changed = false;
   let tasks = snapshot.tasks.map((task) => {
     if (
@@ -506,7 +577,7 @@ export function archiveTask(
       id: options.replacementId,
       now: options.now,
     });
-    tasks = [replacement, ...tasks].slice(0, MAX_TASKS);
+    tasks = [replacement, ...tasks];
     activeTasks = [replacement];
   }
 
@@ -599,21 +670,25 @@ export function groupTasks(tasks: GrokTask[], now = new Date()): TaskGroup[] {
     .filter((group) => group.tasks.length > 0);
 }
 
-export function formatTaskTime(value: string, now = new Date()) {
+export function formatTaskTime(
+  value: string,
+  locale = "en",
+  now = new Date(),
+) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
 
   const sameYear = date.getFullYear() === now.getFullYear();
   const sameDay = startOfLocalDay(date) === startOfLocalDay(now);
   if (sameDay) {
-    return new Intl.DateTimeFormat("en", {
+    return new Intl.DateTimeFormat(locale, {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
     }).format(date);
   }
 
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     year: sameYear ? undefined : "numeric",

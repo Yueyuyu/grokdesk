@@ -4,6 +4,7 @@ mod runtime_context;
 mod runtime_extensions;
 mod runtime_models;
 mod task_exchange;
+mod task_store;
 mod workspace;
 mod workspace_terminal;
 
@@ -23,6 +24,10 @@ use runtime_extensions::{
 };
 use runtime_models::inspect_runtime_models;
 use task_exchange::{read_task_exchange_file, write_task_exchange_file};
+use task_store::{
+    load_native_task_store, read_task_store_backup_file, save_native_task_store,
+    write_task_store_backup_file, TaskStorePersistence,
+};
 use workspace::{
     discard_workspace_change, get_workspace_diff, inspect_workspace, stage_workspace_change,
     unstage_workspace_change,
@@ -56,6 +61,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(GrokBridge::default())
+        .manage(TaskStorePersistence::default())
         .manage(WorkspaceTerminal::default())
         .invoke_handler(tauri::generate_handler![
             run_diagnostics,
@@ -84,6 +90,10 @@ pub fn run() {
             respond_to_client_request,
             read_task_exchange_file,
             write_task_exchange_file,
+            load_native_task_store,
+            save_native_task_store,
+            read_task_store_backup_file,
+            write_task_store_backup_file,
             inspect_workspace,
             get_workspace_diff,
             stage_workspace_change,

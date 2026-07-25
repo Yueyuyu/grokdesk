@@ -9,11 +9,15 @@ import {
   ensureWorkspaceTask,
   filterTasks,
   groupTasks,
+  hasTaskCapacity,
+  MAX_TASKS,
   parseTaskStore,
+  parseTaskStoreResult,
   renameTask,
   restoreTask,
   TASK_STORE_VERSION,
   workspaceStorageKey,
+  type TaskStoreSnapshot,
 } from "./tasks";
 import {
   MAX_TASK_EXCHANGE_BYTES,
@@ -102,6 +106,39 @@ describe("task persistence", () => {
     expect(
       parseTaskStore(JSON.stringify({ version: 99, tasks: [] })),
     ).toEqual(emptyTaskStore());
+  });
+
+  it("reports duplicate and over-capacity stores instead of truncating data", () => {
+    const task = createTask("C:\\work\\app", { id: "duplicate" });
+    const duplicate = parseTaskStoreResult(
+      JSON.stringify({
+        version: TASK_STORE_VERSION,
+        tasks: [task, task],
+        activeTaskIds: {},
+      }),
+    );
+    expect(duplicate.valid).toBe(false);
+    expect(duplicate.error).toContain("malformed or duplicate");
+
+    const full: TaskStoreSnapshot = {
+      version: TASK_STORE_VERSION,
+      tasks: Array.from({ length: MAX_TASKS }, (_, index) =>
+        createTask("C:\\work\\app", { id: `task-${index}` }),
+      ),
+      activeTaskIds: {},
+    };
+    expect(hasTaskCapacity(full)).toBe(false);
+    const overflow = parseTaskStoreResult(
+      JSON.stringify({
+        ...full,
+        tasks: [
+          ...full.tasks,
+          createTask("C:\\work\\app", { id: "overflow" }),
+        ],
+      }),
+    );
+    expect(overflow.valid).toBe(false);
+    expect(overflow.error).toContain(`${MAX_TASKS} supported tasks`);
   });
 });
 
