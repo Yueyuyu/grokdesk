@@ -26,10 +26,10 @@
 
 <p align="center">
   <a href="https://github.com/Yueyuyu/grokdesk/releases/latest"><strong>Download latest</strong></a> ·
+  <a href="#quick-start">Quick start</a> ·
   <a href="#highlights">Features</a> ·
-  <a href="#install-and-first-launch">Install</a> ·
-  <a href="#local-development">Develop</a> ·
-  <a href="#current-limits-and-roadmap">Roadmap</a>
+  <a href="#privacy-and-security">Security</a> ·
+  <a href="#local-development">Develop</a>
 </p>
 
 <p align="center">
@@ -46,6 +46,25 @@
 > GrokDesk is an independent, unofficial open-source project. It is not affiliated with, sponsored by, or endorsed by xAI. “Grok,” “Grok Build,” and related trademarks belong to their respective owners.
 
 ![GrokDesk three-pane task workspace](docs/design/grokdesk-implementation-1440x1024.png)
+
+## Project status
+
+| Item | Current status |
+| --- | --- |
+| Source | `main` currently targets `v0.3.2`; [`package.json`](package.json) and the Tauri configuration are the version sources of truth |
+| Public installers | Follow the **Latest release** badge and [GitHub Releases](https://github.com/Yueyuyu/grokdesk/releases/latest); newly merged source may not receive installers until the next Release |
+| Maturity | **Public beta**: suitable for personal projects and real workspace tasks, while commands, tool permissions, and file reverts should still be reviewed before approval |
+| Supported platforms | Windows 10/11 x64, macOS Apple Silicon, and macOS Intel; there is no official Linux package yet |
+
+> [!NOTE]
+> A feature present on `main` is not necessarily included in the latest public installer. Download a Release for actual use; the browser preview is not a complete client.
+
+## Quick start
+
+1. Download the package for your system from the [latest Release](https://github.com/Yueyuyu/grokdesk/releases/latest).
+2. On Windows, prefer `x64-setup.exe`. On macOS, choose `aarch64.dmg` for Apple Silicon or `x64.dmg` for Intel.
+3. On first launch, select **Install Runtime**, then **Sign in with Grok** to complete the official Runtime setup and OAuth flow.
+4. Choose a project folder and create a task. Review attachments before sending, permission requests before execution, and the real Git diff before merging.
 
 ## Why GrokDesk
 
@@ -70,7 +89,9 @@ The agent itself remains the official Grok Build CLI. GrokDesk focuses on the de
 | Plugins and MCP | Reads and manages real Plugin, Marketplace, and MCP state exposed by the official Runtime |
 | Runtime context and Skills | Reads project instructions, Skills, Agents, and configuration layers for the current workspace through official `grok inspect --json`, then combines capabilities reported by the active ACP session; supports refresh and explicit ACP reconnect, with no simulated browser records |
 | Model and reasoning profiles | Shows models, context windows, and reasoning efforts only from official ACP initialization metadata, then launches tasks through the official `--model` and `--reasoning-effort` arguments; tasks with saved conversation are never restarted silently |
-| Local task history | Stores tasks, messages, plans, tools, and ACP session IDs per workspace; attachment contents are never stored |
+| Reliable local task history | The installed app stores every workspace in a native app-data file, protecting pending updates with atomic replacement, a previous-version automatic backup, and a close-time shadow copy; Settings exposes the real storage state |
+| Faster first render | The task command center and onboarding remain synchronous, while Settings, Account, Diagnostics, Permissions, Plugins, MCP, and the GFM response renderer load only when needed; v0.3.1 reduces the production entry chunk from 730.14 KB to 492.24 KB |
+| Five-language desktop UI | v0.3.2 supports Simplified Chinese, English, Japanese, Korean, and German; it follows the system by default, falls back to Simplified Chinese for unknown languages, and persists instant changes from Settings |
 | Task lifecycle | Archives and restores tasks, creates local branches with a fresh ACP session, and explicitly imports/exports strictly validated JSON up to 8 MiB without credentials or attachment bodies |
 | Command palette and cross-task search | Press `Ctrl+K` to search active and archived tasks in the current workspace across titles, conversations, attachment names, plans, and tools, or run navigation, task, workspace, and inspector commands |
 | Permissions and execution audit | Records redacted permission decisions, Grok tool lifecycles, and terminal command outcomes per workspace, with filters, search, and confirmed clearing; browser previews never generate simulated audit records |
@@ -85,17 +106,34 @@ The agent itself remains the official Grok Build CLI. GrokDesk focuses on the de
 - Task history keeps only attachment name, MIME type, size, and kind—never file text or Base64 data.
 - Browser preview demonstrates the interaction but does not send attachments to a real Grok account.
 
+### Task history and backups
+
+- v0.3.0 migrates legacy browser task history into native storage on first launch and automatically falls back to the last valid backup if the primary file is damaged.
+- v0.3.1 adds a native-storage smoke suite runnable through `npm run test:native-storage`, covering first write, restart reload, previous-version retention, corrupt-primary recovery, save-after-recovery, and explicit rejection when both copies are damaged.
+- **Settings → Task history & backup** shows save state, task count, last-save time, and storage size, with explicit export and restore for a complete all-workspace backup.
+- Local history is limited to 200 tasks, and both the native store and full backup have a 64 MiB safety limit. Capacity and write failures are shown explicitly instead of silently truncating data.
+- Full backups include all task conversations and workspace paths, but remove ACP session IDs, OAuth/MCP credentials, and attachment bodies.
+
+### Desktop UI languages
+
+- v0.3.2 provides complete Simplified Chinese, English, Japanese, Korean, and German desktop catalogs. The default follows the system, and unknown system languages fall back to Simplified Chinese.
+- Settings switches and persists the preference immediately. Navigation, controls, forms, dialogs, notifications, accessibility labels, dates, and numbers all follow the active language.
+- Runtime-provided text, model IDs, commands, paths, and raw terminal output remain unchanged so technical source data is never mistranslated.
+- Each catalog loads as an independent on-demand chunk instead of joining the synchronous entry path; future regressions remain measured against the v0.3.1 492.24 KB production-entry baseline.
+
 ## Install and first launch
 
 Download the package for your platform from [GitHub Releases](https://github.com/Yueyuyu/grokdesk/releases):
 
 | Platform | Package | Notes |
 | --- | --- | --- |
-| Windows 10/11 x64 | `.exe` or `.msi` | Setup automatically creates a GrokDesk desktop shortcut |
-| macOS Apple Silicon | Apple Silicon / `aarch64` `.dmg` | For M1, M2, M3, M4, and later Apple chips |
-| macOS Intel | Intel / `x86_64` `.dmg` | For Intel Macs |
+| Windows 10/11 x64 | `x64-setup.exe` (recommended) or `x64_en-US.msi` | Setup automatically creates a GrokDesk desktop shortcut |
+| macOS Apple Silicon | `aarch64.dmg` | For M1, M2, M3, M4, and later Apple chips |
+| macOS Intel | `x64.dmg` | For Intel Macs |
 
 Current macOS builds are unsigned and unnotarized. If Gatekeeper blocks the first launch, right-click GrokDesk in Finder and choose **Open**, or use **System Settings → Privacy & Security → Open Anyway**. Download only from this repository and verify the package against `SHA256SUMS.txt` from the same release.
+
+The `.app.tar.gz`, `.sig`, and `latest.json` assets in a Release belong to the in-app updater and are not required for a normal manual installation.
 
 Starting with v0.2.9, the installed app can check **Settings → GrokDesk updates**. Automatic checks read version metadata only; download, installation, and restart never happen silently. In-app packages use mandatory Tauri signature verification, while manual downloads should still be checked against `SHA256SUMS.txt`.
 
@@ -168,8 +206,8 @@ Windows bundles are written to `src-tauri/target/release/bundle/`. On macOS, run
 - Account heatmaps and recent tasks aggregate only tasks, messages, and Tools saved for the current local workspace. They do not read OAuth tokens or claim to represent xAI account-wide usage.
 - ACP and Git operations are scoped to the folder the user explicitly selected.
 - The workspace terminal runs only commands explicitly entered by the user; raw output and structured test summaries stay in the current app session and are not written to task history.
-- Attachment content is encoded only for the current turn and is not stored in task history.
-- Task JSON is imported or exported only after an explicit user action. It may contain conversations, file names, and workspace paths, but never OAuth/MCP credentials, ACP session IDs, or attachment bodies.
+- Attachment content is encoded only for the current turn and never enters the native task file, automatic backup, or browser recovery copy.
+- Single-task JSON and complete task-store backups are imported or exported only after an explicit user action. They may contain conversations, file names, and workspace paths, but never OAuth/MCP credentials, ACP session IDs, or attachment bodies.
 - The command palette searches only local tasks in the current workspace; queries and results are never uploaded to an external service.
 - Permission and execution history stays local and workspace-scoped, with a 30-day and 500-record limit. Terminal output, prompts, responses, attachment bodies, OAuth tokens, and MCP headers are excluded, while sensitive command arguments are redacted before persistence.
 - Diagnostic reports contain only versions, platform details, aggregate counts, and controlled status text. Absolute paths, account identifiers, prompts, responses, terminal output, attachments, OAuth credentials, and MCP names, endpoints, or headers are excluded or redacted.
@@ -177,6 +215,32 @@ Windows bundles are written to `src-tauri/target/release/bundle/`. On macOS, run
 - Model profiles persist only validated model IDs and reasoning-effort identifiers. The catalog comes from the official Runtime, browser previews never fabricate it, and no account credentials are read or stored.
 - File revert always requires confirmation; there is no automatic bulk rollback.
 - Raw HTML is disabled in Markdown, and external links use isolated new-window behavior.
+
+## Frequently asked questions
+
+<details>
+<summary><strong>Do I have to install Grok Build manually first?</strong></summary>
+
+No. GrokDesk can invoke xAI's official HTTPS installation script during onboarding. If the official Runtime is already installed, GrokDesk can reuse it.
+</details>
+
+<details>
+<summary><strong>OAuth succeeded in the browser. Why is the account or quota still missing?</strong></summary>
+
+Authentication is completed by the official CLI. GrokDesk waits for an explicit result, reconnects ACP, and refreshes the account information exposed by the Runtime. If the UI still does not update, open Diagnostics and check OAuth and ACP. Subscription and quota values appear only when the official Runtime returns billing data.
+</details>
+
+<details>
+<summary><strong>Why can the browser preview not chat, run terminal commands, or read plugins?</strong></summary>
+
+The browser preview is for reviewing the React interface only. Real ACP, OAuth, local files, Git, terminals, Plugins, and MCP are available only in the Tauri desktop app; preview mode does not fabricate them.
+</details>
+
+<details>
+<summary><strong>Is GrokDesk an official xAI client?</strong></summary>
+
+No. GrokDesk is an independent open-source desktop project. It uses the official Grok CLI, OAuth, and ACP capabilities, but it does not represent xAI or copy the official agent.
+</details>
 
 ## Current limits and roadmap
 

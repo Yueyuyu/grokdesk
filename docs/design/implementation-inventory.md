@@ -74,12 +74,17 @@
 - Tasks, Permissions, Diagnostics, Plugins, MCP, Account, and Settings navigation.
 - Account surface backed by official ACP billing metadata when available, with explicit unsupported states, official OAuth/subscription actions, and a workspace-local 12-month activity heatmap plus recent-task table that never claims to be xAI account-wide usage.
 - Task rename/delete, archive/restore, local branching with a fresh ACP session, and validated JSON import/export.
+- Native task-history persistence with legacy WebView migration, atomic primary-file replacement, a previous-version automatic backup, close-time shadow recovery, visible storage health/capacity, and confirmed full-store backup/restore that strips ACP session IDs and attachment bodies.
+- Startup code splitting for non-task navigation and GFM rendering, with intent preloading, stable loading states, and a 492.24 KB v0.3.1 production-entry baseline.
+- Five-language desktop UI catalogs for Simplified Chinese, English, Japanese, Korean, and German, with system-language following, Simplified Chinese fallback, persisted Settings overrides, localized dates/numbers, dynamic catalog chunks, and explicit preservation of Runtime text, model IDs, commands, paths, and raw terminal output.
+- A standalone native task-store smoke test covering restart reloads, previous-version retention, corruption recovery, post-recovery saves, and double-corruption rejection.
 - `Ctrl+K` command palette for local cross-task search, navigation, task creation, workspace selection, and inspector commands.
 - Local permission and execution audit for redacted permission decisions, Grok tool lifecycles, and workspace-command outcomes, with filtering, search, retention disclosure, and confirmed clearing.
 - Native diagnostics for GrokDesk, Runtime, OAuth, ACP, workspace/Git, and Runtime-reported MCP state, with direct recovery actions and a sanitized Markdown support report. Browser previews never invent checks.
 - Signed GrokDesk updates backed by the official Tauri updater, the committed public key, automatic metadata checks, separate download and install/restart confirmations, real byte progress, and a browser-preview state that never fabricates update data.
 - Runtime Context inspection backed by official `grok inspect --json`, with project instructions, read-only Skills, aggregate Runtime composition, active ACP prompt capabilities, refresh, and explicit reconnect. Credential values, absolute source paths, MCP names/endpoints/headers, and simulated browser context remain excluded.
 - Runtime model profiles backed only by official ACP initialize metadata, with validated per-task/default model and reasoning selections passed through official launch arguments. Empty tasks may reconnect immediately; tasks with saved conversation keep their existing session.
+- Runtime model discovery allows a 90-second official ACP cold start and tells users that the first probe may take about a minute.
 - Resizable left and right panes plus inspector collapse.
 - Changes, Terminal, Tests, and Context tabs.
 - Up to eight independent workspace-terminal tabs with per-tab draft, history, output, background state, rename/close controls, and process-tree cancellation.

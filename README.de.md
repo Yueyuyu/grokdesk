@@ -26,10 +26,10 @@
 
 <p align="center">
   <a href="https://github.com/Yueyuyu/grokdesk/releases/latest"><strong>Neueste Version herunterladen</strong></a> ·
+  <a href="#schnellstart">Schnellstart</a> ·
   <a href="#funktionsübersicht">Funktionen</a> ·
-  <a href="#installation-und-erster-start">Installation</a> ·
-  <a href="#lokale-entwicklung">Entwicklung</a> ·
-  <a href="#aktuelle-grenzen-und-roadmap">Roadmap</a>
+  <a href="#datenschutz-und-sicherheit">Sicherheit</a> ·
+  <a href="#lokale-entwicklung">Entwicklung</a>
 </p>
 
 <p align="center">
@@ -46,6 +46,25 @@
 > GrokDesk ist ein unabhängiges, inoffizielles Open-Source-Projekt. Es besteht keine Zugehörigkeit zu, Förderung durch oder offizielle Anerkennung von xAI. „Grok“, „Grok Build“ und zugehörige Marken gehören ihren jeweiligen Rechteinhabern.
 
 ![GrokDesk-Arbeitsbereich mit drei Bereichen](docs/design/grokdesk-implementation-1440x1024.png)
+
+## Projektstatus
+
+| Punkt | Aktueller Stand |
+| --- | --- |
+| Quellcode | `main` zielt derzeit auf `v0.3.2`; maßgeblich sind [`package.json`](package.json) und die Tauri-Konfiguration |
+| Öffentliche Installer | Maßgeblich sind das Badge **Neueste Version** und die [GitHub Releases](https://github.com/Yueyuyu/grokdesk/releases/latest). Neu zusammengeführter Code erhält möglicherweise erst mit dem nächsten Release einen Installer |
+| Reifegrad | **Öffentliche Beta**: geeignet für persönliche Projekte und echte Workspace-Aufgaben; Befehle, Tool-Berechtigungen und Datei-Wiederherstellungen sollten vor der Freigabe weiterhin geprüft werden |
+| Unterstützte Plattformen | Windows 10/11 x64, macOS Apple Silicon und macOS Intel; ein offizielles Linux-Paket gibt es noch nicht |
+
+> [!NOTE]
+> Eine Funktion auf `main` ist nicht automatisch bereits im neuesten öffentlichen Installer enthalten. Für die tatsächliche Nutzung ein Release herunterladen; die Browser-Vorschau ist kein vollständiger Client.
+
+## Schnellstart
+
+1. Das passende Paket aus dem [neuesten Release](https://github.com/Yueyuyu/grokdesk/releases/latest) herunterladen.
+2. Unter Windows wird `x64-setup.exe` empfohlen. Unter macOS `aarch64.dmg` für Apple Silicon oder `x64.dmg` für Intel auswählen.
+3. Beim ersten Start **Install Runtime** und anschließend **Sign in with Grok** auswählen, um die offizielle Runtime-Installation und OAuth abzuschließen.
+4. Einen Projektordner auswählen und eine Aufgabe erstellen. Anhänge vor dem Senden, Berechtigungsanfragen vor der Ausführung und den echten Git-Diff vor dem Zusammenführen prüfen.
 
 ## Warum GrokDesk?
 
@@ -70,7 +89,9 @@ Der Agent bleibt die offizielle Grok Build CLI. GrokDesk verbessert die Desktop-
 | Plugins und MCP | Liest und verwaltet reale Plugin-, Marketplace- und MCP-Daten der offiziellen Runtime |
 | Runtime-Kontext und Skills | Liest Projektanweisungen, Skills, Agents und Konfigurationsebenen für den aktuellen Workspace über das offizielle `grok inspect --json` und kombiniert sie mit den vom aktiven ACP gemeldeten Fähigkeiten; unterstützt Aktualisierung und ausdrückliches ACP-Neuverbinden, ohne simulierte Browser-Daten |
 | Modell- und Reasoning-Profile | Zeigt Modelle, Kontextfenster und Reasoning-Stufen ausschließlich aus offiziellen ACP-Initialisierungsmetadaten und startet Aufgaben mit den offiziellen Argumenten `--model` und `--reasoning-effort`; Aufgaben mit gespeicherten Unterhaltungen werden nie still neu gestartet |
-| Lokaler Aufgabenverlauf | Speichert Aufgaben, Nachrichten, Pläne, Tools und ACP Session IDs pro Workspace; Anhangsinhalte werden nicht gespeichert |
+| Zuverlässiger lokaler Aufgabenverlauf | Die installierte App speichert alle Workspaces in einer nativen App-Datendatei und schützt noch nicht geschriebene Änderungen durch atomaren Austausch, eine automatische Sicherung der vorherigen Version und eine Schattenkopie beim Beenden; Settings zeigt den echten Speicherzustand |
+| Schnellere Erstanzeige | Aufgabenzentrale und Onboarding bleiben synchron geladen; Settings, Account, Diagnostics, Permissions, Plugins, MCP und der GFM-Antwort-Renderer werden nur bei Bedarf geladen. v0.3.1 reduziert den Produktions-Einstiegsblock von 730,14 KB auf 492,24 KB |
+| Desktop-Oberfläche in fünf Sprachen | v0.3.2 unterstützt vereinfachtes Chinesisch, English, 日本語, 한국어 und Deutsch. Standardmäßig folgt die App dem System, unbekannte Sprachen fallen auf vereinfachtes Chinesisch zurück, und Änderungen in Settings werden sofort gespeichert |
 | Aufgabenlebenszyklus | Archiviert und stellt Aufgaben wieder her, erstellt lokale Zweige mit neuer ACP Session und importiert/exportiert ausdrücklich streng validiertes JSON bis 8 MiB – ohne Zugangsdaten oder Anhangsinhalte |
 | Befehlspalette und aufgabenübergreifende Suche | `Ctrl+K` durchsucht aktive und archivierte Aufgaben im aktuellen Workspace nach Titeln, Unterhaltungen, Anhangsnamen, Plänen und Tools oder führt Navigations-, Aufgaben-, Workspace- und Inspector-Befehle aus |
 | Berechtigungszentrum und Ausführungsprotokoll | Speichert maskierte Berechtigungsentscheidungen, Grok-Tool-Lebenszyklen und Terminal-Befehlsergebnisse pro Workspace, mit Filtern, Suche und bestätigtem Löschen; Browser-Vorschauen erzeugen keine simulierten Protokolle |
@@ -85,17 +106,34 @@ Der Agent bleibt die offizielle Grok Build CLI. GrokDesk verbessert die Desktop-
 - Im Aufgabenverlauf bleiben nur Dateiname, MIME-Typ, Größe und Art – niemals Dateiinhalt oder Base64-Daten.
 - Die Browser-Vorschau demonstriert nur die Bedienung und sendet keine Anhänge an ein echtes Grok-Konto.
 
+### Aufgabenverlauf und Sicherungen
+
+- v0.3.0 migriert beim ersten Start den bisherigen Browser-Aufgabenverlauf in den nativen Speicher und verwendet automatisch die letzte gültige Sicherung, wenn die Hauptdatei beschädigt ist.
+- v0.3.1 ergänzt eine über `npm run test:native-storage` separat ausführbare Smoke-Test-Suite für den nativen Speicher: Erstschreiben, Laden nach Neustart, Erhalt der vorherigen Version, Wiederherstellung nach beschädigter Hauptdatei, erneutes Speichern nach der Wiederherstellung und ausdrückliche Ablehnung bei zwei beschädigten Kopien.
+- **Settings → Task history & backup** zeigt Speicherzustand, Aufgabenzahl, letzten Speicherzeitpunkt und Größe und ermöglicht den ausdrücklichen Export oder die Wiederherstellung einer vollständigen Sicherung aller Workspaces.
+- Der lokale Verlauf ist auf 200 Aufgaben begrenzt; nativer Speicher und vollständige Sicherungen haben ein Sicherheitslimit von 64 MiB. Kapazitäts- und Schreibfehler werden sichtbar gemeldet, statt Daten still abzuschneiden.
+- Vollständige Sicherungen enthalten alle Aufgabenunterhaltungen und Workspace-Pfade, entfernen aber ACP Session IDs, OAuth-/MCP-Zugangsdaten und Anhangsinhalte.
+
+### Sprachen der Desktop-Oberfläche
+
+- v0.3.2 enthält vollständige Desktop-Kataloge für vereinfachtes Chinesisch, English, 日本語, 한국어 und Deutsch. Standardmäßig folgt die App der Systemeinstellung; nicht unterstützte Systemsprachen fallen auf vereinfachtes Chinesisch zurück.
+- In Settings lässt sich die Sprache sofort wechseln und dauerhaft speichern. Navigation, Bedienelemente, Formulare, Dialoge, Benachrichtigungen, Barrierefreiheitsbeschriftungen, Datums- und Zahlenformate folgen der aktiven Sprache.
+- Von der Runtime gelieferte Originaltexte, Modell-IDs, Befehle, Pfade und rohe Terminalausgaben bleiben unverändert, damit technische Quelldaten nicht falsch übersetzt werden.
+- Jeder Katalog wird als eigener bedarfsgeladener Chunk geladen und nicht in den synchronen Einstieg aufgenommen. Die 492,24 KB des v0.3.1-Produktionseinstiegs bleiben die Referenz für künftige Regressionen.
+
 ## Installation und erster Start
 
 Das passende Paket kann unter [GitHub Releases](https://github.com/Yueyuyu/grokdesk/releases) heruntergeladen werden:
 
 | Plattform | Paket | Hinweis |
 | --- | --- | --- |
-| Windows 10/11 x64 | `.exe` oder `.msi` | Erstellt bei der Installation automatisch eine GrokDesk-Desktopverknüpfung |
-| macOS Apple Silicon | Apple Silicon / `aarch64` `.dmg` | Für M1, M2, M3, M4 und spätere Apple-Chips |
-| macOS Intel | Intel / `x86_64` `.dmg` | Für Intel-Macs |
+| Windows 10/11 x64 | `x64-setup.exe` (empfohlen) oder `x64_en-US.msi` | Erstellt bei der Installation automatisch eine GrokDesk-Desktopverknüpfung |
+| macOS Apple Silicon | `aarch64.dmg` | Für M1, M2, M3, M4 und spätere Apple-Chips |
+| macOS Intel | `x64.dmg` | Für Intel-Macs |
 
 Die aktuellen macOS-Builds sind weder signiert noch notarisiert. Blockiert Gatekeeper den ersten Start, in Finder GrokDesk mit der rechten Maustaste anklicken und **Öffnen** wählen oder **Systemeinstellungen → Datenschutz & Sicherheit → Dennoch öffnen** verwenden. Nur aus den Releases dieses Repositorys herunterladen und das Paket mit `SHA256SUMS.txt` aus demselben Release prüfen.
+
+Die Dateien `.app.tar.gz`, `.sig` und `latest.json` in einem Release gehören zum integrierten Updater und werden für eine normale manuelle Installation nicht benötigt.
 
 Ab v0.2.9 kann die installierte App unter **Settings → GrokDesk updates** nach Updates suchen. Automatische Prüfungen lesen nur Versionsmetadaten; Download, Installation und Neustart erfolgen nie still. In-App-Updates verwenden die verpflichtende Tauri-Signaturprüfung, manuelle Downloads sollten zusätzlich mit `SHA256SUMS.txt` geprüft werden.
 
@@ -168,8 +206,8 @@ Windows-Pakete werden unter `src-tauri/target/release/bundle/` erzeugt. Unter ma
 - Account-Heatmaps und letzte Aufgaben aggregieren nur lokal gespeicherte Aufgaben, Nachrichten und Tools des aktuellen Workspace. Sie lesen keine OAuth-Token und werden nicht als xAI-kontoweite Nutzung dargestellt.
 - ACP- und Git-Aktionen sind auf den vom Nutzer ausgewählten Ordner begrenzt.
 - Das Workspace-Terminal führt nur ausdrücklich eingegebene Befehle aus; Rohausgabe und strukturierte Testzusammenfassungen bleiben in der aktuellen App-Sitzung und werden nicht im Aufgabenverlauf gespeichert.
-- Anhangsinhalte werden nur für die aktuelle Anfrage kodiert und nicht im Aufgabenverlauf gespeichert.
-- Aufgaben-JSON wird nur nach einer ausdrücklichen Benutzeraktion importiert oder exportiert. Es kann Unterhaltungen, Dateinamen und Workspace-Pfade enthalten, aber niemals OAuth-/MCP-Zugangsdaten, ACP Session IDs oder Anhangsinhalte.
+- Anhangsinhalte werden nur für die aktuelle Anfrage kodiert und gelangen weder in die native Aufgabendatei noch in automatische Sicherungen oder die Browser-Wiederherstellungskopie.
+- Einzelaufgaben-JSON und vollständige Aufgabensicherungen werden nur nach einer ausdrücklichen Benutzeraktion importiert oder exportiert. Sie können Unterhaltungen, Dateinamen und Workspace-Pfade enthalten, aber niemals OAuth-/MCP-Zugangsdaten, ACP Session IDs oder Anhangsinhalte.
 - Die Befehlspalette durchsucht nur lokale Aufgaben im aktuellen Workspace; Suchbegriffe und Ergebnisse werden nicht an externe Dienste übertragen.
 - Der Berechtigungs- und Ausführungsverlauf bleibt lokal und Workspace-gebunden und ist auf 30 Tage sowie 500 Einträge begrenzt. Terminalausgaben, Prompts, Antworten, Anhangsinhalte, OAuth-Token und MCP-Header werden nicht gespeichert; sensible Befehlsargumente werden vor dem Speichern maskiert.
 - Diagnoseberichte enthalten nur Versionen, Plattformdaten, aggregierte Zähler und kontrollierte Statustexte. Absolute Pfade, Konto-IDs, Prompts, Antworten, Terminalausgaben, Anhänge, OAuth-Zugangsdaten sowie MCP-Namen, Endpunkte und Header werden ausgeschlossen oder maskiert.
@@ -177,6 +215,32 @@ Windows-Pakete werden unter `src-tauri/target/release/bundle/` erzeugt. Unter ma
 - Modellprofile speichern nur validierte Modell-IDs und Reasoning-Kennungen. Der Katalog stammt aus der offiziellen Runtime, Browser-Vorschauen erfinden ihn nicht, und Konto-Zugangsdaten werden weder gelesen noch gespeichert.
 - Das Zurücksetzen einer Datei erfordert immer eine Bestätigung; es gibt kein automatisches Massen-Rollback.
 - Rohes HTML ist in Markdown deaktiviert; externe Links verwenden ein isoliertes neues Fenster.
+
+## Häufig gestellte Fragen
+
+<details>
+<summary><strong>Muss Grok Build zuerst manuell installiert werden?</strong></summary>
+
+Nein. GrokDesk kann während des Onboardings das offizielle HTTPS-Installationsskript von xAI ausführen. Eine bereits installierte offizielle Runtime wird wiederverwendet.
+</details>
+
+<details>
+<summary><strong>OAuth war im Browser erfolgreich. Warum fehlen Konto oder Kontingent weiterhin?</strong></summary>
+
+Die Anmeldung wird von der offiziellen CLI abgeschlossen. GrokDesk wartet auf ein eindeutiges Ergebnis, verbindet ACP neu und aktualisiert die von der Runtime bereitgestellten Kontodaten. Bleibt die Anzeige unverändert, sollten OAuth und ACP unter Diagnostics geprüft werden. Abonnement und Kontingent erscheinen nur, wenn die offizielle Runtime Billing-Daten liefert.
+</details>
+
+<details>
+<summary><strong>Warum kann die Browser-Vorschau nicht chatten, Terminalbefehle ausführen oder Plugins lesen?</strong></summary>
+
+Die Browser-Vorschau dient ausschließlich zur Prüfung der React-Oberfläche. Echtes ACP, OAuth, lokale Dateien, Git, Terminals, Plugins und MCP sind nur in der Tauri-Desktop-App verfügbar; die Vorschau erfindet diese Daten nicht.
+</details>
+
+<details>
+<summary><strong>Ist GrokDesk ein offizieller xAI-Client?</strong></summary>
+
+Nein. GrokDesk ist ein unabhängiges Open-Source-Desktopprojekt. Es verwendet die offizielle Grok CLI sowie OAuth und ACP, vertritt aber nicht xAI und kopiert nicht den offiziellen Agent.
+</details>
 
 ## Aktuelle Grenzen und Roadmap
 
