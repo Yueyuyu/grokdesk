@@ -8,7 +8,7 @@
           Key="Software\grokdesk\GrokDesk"
           Name="VersionedShortcutRepair"
           Type="string"
-          Value="0.2.9"
+          Value="0.3.2"
           KeyPath="yes" />
       </Component>
     </DirectoryRef>
@@ -18,7 +18,7 @@
       Execute="deferred"
       Impersonate="yes"
       Return="check"
-      ExeCommand="&quot;[SystemFolder]wscript.exe&quot; //B //NoLogo &quot;[INSTALLDIR]repair-versioned-shortcut.vbs&quot; &quot;[INSTALLDIR]&quot; &quot;GrokDesk-v0.2.9.ico&quot;" />
+      ExeCommand="&quot;[SystemFolder]wscript.exe&quot; //B //NoLogo &quot;[INSTALLDIR]repair-versioned-shortcut.vbs&quot; &quot;[INSTALLDIR]&quot; &quot;GrokDesk-v0.3.2.ico&quot;" />
     <InstallExecuteSequence>
       <Custom
         Action="RepairVersionedDesktopShortcut"
