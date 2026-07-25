@@ -45,7 +45,7 @@
 > [!IMPORTANT]
 > GrokDesk는 독립적인 비공식 오픈 소스 프로젝트입니다. xAI와 제휴하거나 후원 또는 공식 승인을 받은 프로젝트가 아닙니다. “Grok”, “Grok Build” 및 관련 상표의 권리는 각 소유자에게 있습니다.
 
-![GrokDesk 3개 패널 작업 공간](docs/design/grokdesk-implementation-1440x1024.png)
+![GrokDesk 3개 패널 작업 공간](docs/design/grokdesk-implementation-ko-1440x1024.png)
 
 ## 프로젝트 상태
 

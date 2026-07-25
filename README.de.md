@@ -45,7 +45,7 @@
 > [!IMPORTANT]
 > GrokDesk ist ein unabhängiges, inoffizielles Open-Source-Projekt. Es besteht keine Zugehörigkeit zu, Förderung durch oder offizielle Anerkennung von xAI. „Grok“, „Grok Build“ und zugehörige Marken gehören ihren jeweiligen Rechteinhabern.
 
-![GrokDesk-Arbeitsbereich mit drei Bereichen](docs/design/grokdesk-implementation-1440x1024.png)
+![GrokDesk-Arbeitsbereich mit drei Bereichen](docs/design/grokdesk-implementation-de-1440x1024.png)
 
 ## Projektstatus
 

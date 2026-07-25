@@ -303,7 +303,7 @@ jobs:
             --tag "$GITHUB_REF_NAME" \
             --version "$version" \
             --output release-assets/latest.json \
-            --notes "GrokDesk $version adds signed in-app updates, explicit download/install confirmation, package smoke tests, and automatic release retention." \
+            --notes "GrokDesk $version adds durable native task history, a faster startup path, and complete Simplified Chinese, English, Japanese, Korean, and German desktop UI." \
             --published-at "$published_at"
           jq -e \
             '.platforms["windows-x86_64"].signature and

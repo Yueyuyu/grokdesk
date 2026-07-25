@@ -45,7 +45,7 @@
 > [!IMPORTANT]
 > GrokDesk 是独立、非官方的开源项目，与 xAI 不存在隶属、赞助或官方认可关系。“Grok”“Grok Build”和相关商标归其各自权利人所有。
 
-![GrokDesk 三栏任务工作台](docs/design/grokdesk-implementation-1440x1024.png)
+![GrokDesk 三栏任务工作台](docs/design/grokdesk-implementation-zh-CN-1440x1024.png)
 
 ## 项目状态
 

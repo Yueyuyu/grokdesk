@@ -45,7 +45,7 @@
 > [!IMPORTANT]
 > GrokDesk is an independent, unofficial open-source project. It is not affiliated with, sponsored by, or endorsed by xAI. “Grok,” “Grok Build,” and related trademarks belong to their respective owners.
 
-![GrokDesk three-pane task workspace](docs/design/grokdesk-implementation-1440x1024.png)
+![GrokDesk three-pane task workspace](docs/design/grokdesk-implementation-en-1440x1024.png)
 
 ## Project status
 
