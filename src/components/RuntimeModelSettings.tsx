@@ -1,5 +1,6 @@
 import { ArrowClockwise, Brain, Info } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 import type {
   RuntimeLaunchProfile,
   RuntimeModelState,
@@ -34,6 +35,7 @@ export function RuntimeModelSettings({
   onConfigure,
   onRefresh,
 }: RuntimeModelSettingsProps) {
+  const { formatNumber, t } = useI18n();
   const [selectedModelId, setSelectedModelId] = useState("");
   const [selectedReasoningEffort, setSelectedReasoningEffort] = useState("");
   const selectedModel = useMemo(
@@ -87,7 +89,7 @@ export function RuntimeModelSettings({
     fallbackModelId: string | null = null,
   ) => {
     const modelId = profile.modelId ?? fallbackModelId;
-    if (!modelId) return "跟随官方 Runtime 默认值";
+    if (!modelId) return t("models.followRuntimeDefault");
     const model = modelState?.availableModels.find(
       (candidate) => candidate.modelId === modelId,
     );
@@ -95,7 +97,7 @@ export function RuntimeModelSettings({
       (candidate) => candidate.value === profile.reasoningEffort,
     );
     return `${model?.name ?? modelId} · ${
-      effort?.label ?? "Runtime 默认推理强度"
+      effort?.label ?? t("models.runtimeDefaultEffort")
     }`;
   };
 
@@ -115,8 +117,8 @@ export function RuntimeModelSettings({
       <div className="model-settings model-settings--empty">
         <Brain size={22} />
         <div>
-          <strong>浏览器预览不模拟模型目录</strong>
-          <p>安装版只展示官方 Grok Runtime 在 ACP 初始化时真实返回的模型和推理强度。</p>
+          <strong>{t("models.previewTitle")}</strong>
+          <p>{t("models.previewDescription")}</p>
         </div>
       </div>
     );
@@ -127,8 +129,8 @@ export function RuntimeModelSettings({
       <div className="model-settings model-settings--empty">
         <Brain size={22} />
         <div>
-          <strong>尚未读取官方模型目录</strong>
-          <p>直接读取官方 Runtime 的 ACP 初始化元数据，不创建任务会话，也不会读取账号凭据。</p>
+          <strong>{t("models.emptyTitle")}</strong>
+          <p>{t("models.emptyDescription")}</p>
         </div>
         <button
           type="button"
@@ -137,7 +139,7 @@ export function RuntimeModelSettings({
           onClick={() => void onRefresh().catch(() => undefined)}
         >
           <ArrowClockwise size={16} className={loading ? "spin" : undefined} />
-          {loading ? "正在读取…" : "读取官方模型"}
+          {loading ? t("models.loading") : t("models.load")}
         </button>
       </div>
     );
@@ -151,14 +153,14 @@ export function RuntimeModelSettings({
           <strong>{selectedModel?.name ?? modelState.currentModelId}</strong>
           <small>
             {selectedModel?.description ??
-              "模型信息由当前官方 Grok Runtime 提供。"}
+              t("models.descriptionFallback")}
           </small>
         </span>
         <button
           type="button"
           className="icon-button"
-          title="刷新官方模型目录"
-          aria-label="刷新官方模型目录"
+          title={t("models.refresh")}
+          aria-label={t("models.refresh")}
           disabled={loading || configuring}
           onClick={() => void onRefresh().catch(() => undefined)}
         >
@@ -167,7 +169,7 @@ export function RuntimeModelSettings({
       </div>
       <div className="model-settings__form">
         <label>
-          <span>Model</span>
+          <span>{t("models.model")}</span>
           <select
             value={selectedModelId}
             disabled={configuring || disabled}
@@ -181,7 +183,7 @@ export function RuntimeModelSettings({
           </select>
         </label>
         <label>
-          <span>Reasoning effort</span>
+          <span>{t("models.reasoningEffort")}</span>
           <select
             value={selectedReasoningEffort}
             disabled={
@@ -201,32 +203,34 @@ export function RuntimeModelSettings({
                 </option>
               ))
             ) : (
-              <option value="">Runtime default</option>
+              <option value="">{t("models.runtimeDefault")}</option>
             )}
           </select>
         </label>
       </div>
       <dl className="model-settings__facts">
         <div>
-          <dt>当前任务</dt>
+          <dt>{t("models.currentTask")}</dt>
           <dd>
             {runtimeProfile
               ? formatProfile(runtimeProfile, modelState.currentModelId)
-              : "尚无活动任务"}
+              : t("context.noActiveTask")}
           </dd>
         </div>
         <div>
-          <dt>新任务默认</dt>
+          <dt>{t("models.newTaskDefault")}</dt>
           <dd>
             {formatProfile(defaultRuntimeProfile, modelState.currentModelId)}
           </dd>
         </div>
         <div>
-          <dt>Context window</dt>
+          <dt>{t("models.contextWindow")}</dt>
           <dd>
             {selectedModel?.totalContextTokens
-              ? `${selectedModel.totalContextTokens.toLocaleString("en-US")} tokens`
-              : "官方 Runtime 未提供"}
+              ? t("models.tokens", {
+                  count: formatNumber(selectedModel.totalContextTokens),
+                })
+              : t("models.notProvided")}
           </dd>
         </div>
       </dl>
@@ -234,10 +238,10 @@ export function RuntimeModelSettings({
         <Info size={16} />
         <span>
           {taskHasConversation
-            ? "当前任务已有对话。为避免丢失 Runtime 上下文，本次保存只会成为后续新任务的默认值。"
+            ? t("models.notice.conversation")
             : canApplyToCurrent
-              ? "当前任务尚无对话。保存后会创建新的 ACP 会话，使模型与推理强度立即生效。"
-              : "可先保存为新任务默认值；完成登录并选择工作区后，Runtime 会在新任务启动时应用。"}
+              ? t("models.notice.applyCurrent")
+              : t("models.notice.defaultOnly")}
         </span>
       </div>
       <div className="runtime-summary__actions">
@@ -257,12 +261,12 @@ export function RuntimeModelSettings({
             className={configuring ? "spin" : undefined}
           />
           {configuring
-            ? "正在应用…"
+            ? t("models.applying")
             : canApplyToCurrent
-              ? "保存并应用"
+              ? t("models.saveApply")
               : taskHasConversation
-                ? "设为新任务默认"
-                : "保存为新任务默认"}
+                ? t("models.setNewTaskDefault")
+                : t("models.saveNewTaskDefault")}
         </button>
       </div>
     </div>

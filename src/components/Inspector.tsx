@@ -1,6 +1,8 @@
 import { CaretLeft } from "@phosphor-icons/react";
 import type { WorkspaceChangesController } from "../hooks/useWorkspaceChanges";
 import type { WorkspaceTerminalController } from "../hooks/useWorkspaceTerminal";
+import { useI18n } from "../i18n/I18nProvider";
+import type { TranslationKey } from "../i18n/types";
 import type {
   GrokTask,
   InspectorTab,
@@ -32,11 +34,11 @@ interface InspectorProps {
   onReconnect: () => Promise<unknown>;
 }
 
-const tabLabels: Record<InspectorTab, string> = {
-  changes: "Changes",
-  terminal: "Terminal",
-  tests: "Tests",
-  context: "Context",
+const tabLabelKeys: Record<InspectorTab, TranslationKey> = {
+  changes: "inspector.changes",
+  terminal: "inspector.terminal",
+  tests: "inspector.tests",
+  context: "inspector.context",
 };
 
 export function Inspector({
@@ -59,15 +61,16 @@ export function Inspector({
   onOpenSettings,
   onReconnect,
 }: InspectorProps) {
+  const { t } = useI18n();
   return (
-    <aside className="inspector" aria-label="Task inspector">
+    <aside className="inspector" aria-label={t("inspector.taskInspector")}>
       <div className="inspector__topbar">
         <div
           className="inspector-tabs"
           role="tablist"
-          aria-label="Inspector views"
+          aria-label={t("inspector.views")}
         >
-          {(Object.keys(tabLabels) as InspectorTab[]).map((tab) => (
+          {(Object.keys(tabLabelKeys) as InspectorTab[]).map((tab) => (
             <button
               type="button"
               role="tab"
@@ -76,7 +79,7 @@ export function Inspector({
               className={activeTab === tab ? "is-active" : ""}
               onClick={() => onTabChange(tab)}
             >
-              {tabLabels[tab]}
+              {t(tabLabelKeys[tab])}
             </button>
           ))}
         </div>
@@ -84,7 +87,7 @@ export function Inspector({
           type="button"
           className="icon-button inspector__collapse"
           onClick={onCollapse}
-          aria-label="Collapse inspector"
+          aria-label={t("inspector.collapse")}
         >
           <CaretLeft size={16} />
         </button>

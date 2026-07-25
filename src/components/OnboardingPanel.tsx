@@ -10,6 +10,7 @@ import {
   UserCircle,
 } from "@phosphor-icons/react";
 import appIcon from "../assets/grokdesk-icon.png";
+import { useI18n } from "../i18n/I18nProvider";
 import { getRuntimeSetupStep } from "../lib/runtime";
 import type { RuntimeStatus } from "../types";
 
@@ -34,6 +35,7 @@ export function OnboardingPanel({
   onManageSubscription,
   onOpenSettings,
 }: OnboardingPanelProps) {
+  const { t } = useI18n();
   const setupStep = getRuntimeSetupStep(runtime);
   const runtimeReady = runtime?.available === true;
   const accountReady = setupStep === "ready";
@@ -44,11 +46,9 @@ export function OnboardingPanel({
         <header className="onboarding-header">
           <img src={appIcon} alt="" />
           <div>
-            <span>GrokDesk v0.2.8</span>
-            <h1 id="onboarding-title">三步开始使用 GrokDesk</h1>
-            <p>
-              不需要先打开终端。GrokDesk 可以安装官方 Grok Runtime，随后直接跳转到官方 OAuth 登录。
-            </p>
+            <span>GrokDesk</span>
+            <h1 id="onboarding-title">{t("onboarding.title")}</h1>
+            <p>{t("onboarding.description")}</p>
           </div>
         </header>
 
@@ -56,7 +56,7 @@ export function OnboardingPanel({
           <div className="preview-notice" role="note">
             <Info size={18} weight="fill" />
             <span>
-              当前是浏览器预览。下面的安装与登录只模拟界面状态，不会安装软件、访问账号或保存凭据。
+              {t("onboarding.previewNotice")}
             </span>
           </div>
         ) : null}
@@ -67,11 +67,14 @@ export function OnboardingPanel({
               {runtimeReady ? <Check size={19} weight="bold" /> : <DownloadSimple size={20} />}
             </span>
             <div>
-              <strong>安装官方 Grok Runtime</strong>
+              <strong>{t("onboarding.installTitle")}</strong>
               <p>
                 {runtimeReady
-                  ? `${runtime?.version || "Official runtime"} 已就绪`
-                  : "由 xAI 官方安装脚本完成，安装日志会显示在右侧 Terminal。"}
+                  ? t("onboarding.runtimeReady", {
+                      version:
+                        runtime?.version || t("onboarding.officialRuntime"),
+                    })
+                  : t("onboarding.installDescription")}
               </p>
             </div>
             {!runtimeReady ? (
@@ -82,10 +85,14 @@ export function OnboardingPanel({
                 onClick={() => void onInstall().catch(() => undefined)}
               >
                 <DownloadSimple size={16} />
-                {installing ? "正在安装…" : setupStep === "checking" ? "正在检测…" : "安装 Runtime"}
+                {installing
+                  ? t("common.installing")
+                  : setupStep === "checking"
+                    ? t("common.checking")
+                    : t("settings.runtime.install")}
               </button>
             ) : (
-              <span className="setup-list__done">已完成</span>
+              <span className="setup-list__done">{t("common.done")}</span>
             )}
           </li>
 
@@ -94,13 +101,15 @@ export function OnboardingPanel({
               {accountReady ? <Check size={19} weight="bold" /> : <UserCircle size={20} />}
             </span>
             <div>
-              <strong>登录 Grok 账号</strong>
+              <strong>{t("onboarding.signInTitle")}</strong>
               <p>
-                使用官方 <code>grok login --oauth</code> 流程；OAuth 凭据仍由官方 CLI 管理。
+                {t("onboarding.signInDescription.before")}{" "}
+                <code>grok login --oauth</code>{" "}
+                {t("onboarding.signInDescription.after")}
               </p>
             </div>
             {accountReady ? (
-              <span className="setup-list__done">已完成</span>
+              <span className="setup-list__done">{t("common.done")}</span>
             ) : (
               <button
                 type="button"
@@ -109,7 +118,9 @@ export function OnboardingPanel({
                 onClick={() => void onSignIn().catch(() => undefined)}
               >
                 <ArrowSquareOut size={16} />
-                {signingIn ? "等待 OAuth…" : "使用 Grok 登录"}
+                {signingIn
+                  ? t("onboarding.waitingOAuth")
+                  : t("onboarding.signInAction")}
               </button>
             )}
           </li>
@@ -117,23 +128,25 @@ export function OnboardingPanel({
           <li>
             <span className="setup-list__icon"><CreditCard size={20} /></span>
             <div>
-              <strong>查看或升级订阅（可选）</strong>
-              <p>打开官方 SuperGrok 页面查看套餐与用量；Settings 会显示客户端能够验证到的账号状态。</p>
+              <strong>{t("onboarding.subscriptionTitle")}</strong>
+              <p>{t("onboarding.subscriptionDescription")}</p>
             </div>
             <button
               type="button"
               className="secondary-button"
               onClick={() => void onManageSubscription().catch(() => undefined)}
             >
-              查看方案 <ArrowRight size={15} />
+              {t("onboarding.viewPlans")} <ArrowRight size={15} />
             </button>
           </li>
         </ol>
 
         <footer className="onboarding-footer">
-          <span><ShieldCheck size={17} /> GrokDesk 不读取或保存 OAuth Token。</span>
+          <span>
+            <ShieldCheck size={17} /> {t("onboarding.credentialNotice")}
+          </span>
           <button type="button" onClick={onOpenSettings}>
-            <GearSix size={15} /> 打开完整设置
+            <GearSix size={15} /> {t("onboarding.openSettings")}
           </button>
         </footer>
       </section>

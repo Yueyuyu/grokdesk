@@ -13,6 +13,7 @@ import {
   useState,
   type DragEvent,
 } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 import {
   attachmentKind,
   formatAttachmentSize,
@@ -46,6 +47,7 @@ export function Composer({
   onSend,
   onCancel,
 }: ComposerProps) {
+  const { locale, t } = useI18n();
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<SelectedAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -80,6 +82,18 @@ export function Composer({
     const validation = validateAttachmentSelection(
       attachments.map((attachment) => attachment.file),
       incoming,
+      {
+        locale,
+        messages: {
+          tooMany: (maximum) =>
+            t("composer.error.tooMany", { count: maximum }),
+          tooLarge: (name, size, maximum) =>
+            t("composer.error.tooLarge", { name, size, maximum }),
+          totalTooLarge: (maximum) =>
+            t("composer.error.totalTooLarge", { maximum }),
+          invalid: t("composer.error.invalid"),
+        },
+      },
     );
     const next = validation.accepted.map((file) => ({
       id: createAttachmentId(),
@@ -110,6 +124,18 @@ export function Composer({
     try {
       const prepared = await preparePromptAttachments(
         attachments.map((attachment) => attachment.file),
+        {
+          locale,
+          messages: {
+            tooMany: (maximum) =>
+              t("composer.error.tooMany", { count: maximum }),
+            tooLarge: (name, size, maximum) =>
+              t("composer.error.tooLarge", { name, size, maximum }),
+            totalTooLarge: (maximum) =>
+              t("composer.error.totalTooLarge", { maximum }),
+            invalid: t("composer.error.invalid"),
+          },
+        },
       );
       setPreparing(false);
       setValue("");
@@ -173,7 +199,10 @@ export function Composer({
       />
 
       {attachments.length > 0 ? (
-        <div className="composer__attachments" aria-label="Selected attachments">
+        <div
+          className="composer__attachments"
+          aria-label={t("composer.selectedAttachments")}
+        >
           {attachments.map((attachment) => {
             const kind = attachmentKind(attachment.file);
             return (
@@ -187,13 +216,17 @@ export function Composer({
                 )}
                 <span className="attachment-chip__copy">
                   <strong title={attachment.file.name}>{attachment.file.name}</strong>
-                  <small>{formatAttachmentSize(attachment.file.size)}</small>
+                  <small>
+                    {formatAttachmentSize(attachment.file.size, locale)}
+                  </small>
                 </span>
                 <button
                   type="button"
                   onClick={() => removeAttachment(attachment.id)}
                   disabled={composerBusy}
-                  aria-label={`Remove ${attachment.file.name}`}
+                  aria-label={t("composer.removeAttachment", {
+                    name: attachment.file.name,
+                  })}
                 >
                   <X size={12} weight="bold" />
                 </button>
@@ -215,8 +248,8 @@ export function Composer({
           }
         }}
         rows={3}
-        aria-label="Message Grok Build"
-        placeholder="Ask Grok Build anything…"
+        aria-label={t("composer.messageAria")}
+        placeholder={t("composer.placeholder")}
       />
 
       {attachmentError ? (
@@ -232,13 +265,13 @@ export function Composer({
             className="icon-button composer__add"
             onClick={() => fileInput.current?.click()}
             disabled={disabled || composerBusy}
-            aria-label="Add files or images"
-            title="Add files or images"
+            aria-label={t("composer.addAttachments")}
+            title={t("composer.addAttachments")}
           >
             <Plus size={17} weight="bold" />
           </button>
           <span className="keyboard-hint">
-            Add or drop files · {keyboardShortcut} to send
+            {t("composer.attachmentHint", { shortcut: keyboardShortcut })}
           </span>
         </div>
         <div className="composer__actions">
@@ -249,7 +282,7 @@ export function Composer({
               onClick={() => void onCancel()}
             >
               <Stop size={13} weight="fill" />
-              Stop
+              {t("common.stop")}
             </button>
           ) : null}
           <button
@@ -263,7 +296,7 @@ export function Composer({
             ) : (
               <PaperPlaneTilt size={17} weight="fill" />
             )}
-            {preparing ? "Preparing" : "Send"}
+            {preparing ? t("composer.preparing") : t("composer.send")}
           </button>
         </div>
       </div>
@@ -271,8 +304,8 @@ export function Composer({
       {dragging ? (
         <div className="composer__drop-overlay" aria-hidden="true">
           <FileImage size={24} />
-          <strong>Drop files to attach</strong>
-          <span>Images, text, PDFs, and other workspace files</span>
+          <strong>{t("composer.dropTitle")}</strong>
+          <span>{t("composer.dropDescription")}</span>
         </div>
       ) : null}
     </div>

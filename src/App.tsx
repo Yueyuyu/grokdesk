@@ -1,21 +1,21 @@
-import { CaretLeft, SidebarSimple, X } from "@phosphor-icons/react";
 import {
+  CaretLeft,
+  CircleNotch,
+  SidebarSimple,
+  X,
+} from "@phosphor-icons/react";
+import {
+  lazy,
+  Suspense,
   useEffect,
   useMemo,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { AccountPanel } from "./components/AccountPanel";
-import { CommandPalette } from "./components/CommandPalette";
-import { DiagnosticCenter } from "./components/DiagnosticCenter";
-import { FeaturePanel } from "./components/FeaturePanel";
 import { Inspector } from "./components/Inspector";
-import { McpPanel } from "./components/McpPanel";
 import { OnboardingPanel } from "./components/OnboardingPanel";
-import { PermissionCenter } from "./components/PermissionCenter";
 import { PermissionDialog } from "./components/PermissionDialog";
-import { PluginPanel } from "./components/PluginPanel";
 import { Sidebar } from "./components/Sidebar";
 import { TaskWorkspace } from "./components/TaskWorkspace";
 import { TitleBar } from "./components/TitleBar";
@@ -25,6 +25,8 @@ import { useTaskStore } from "./hooks/useTaskStore";
 import { useWorkspaceChanges } from "./hooks/useWorkspaceChanges";
 import { useWorkspaceTerminal } from "./hooks/useWorkspaceTerminal";
 import { useAppUpdate } from "./hooks/useAppUpdate";
+import { useI18n } from "./i18n/I18nProvider";
+import type { TranslationKey } from "./i18n/types";
 import {
   chooseWorkspace,
   isDesktopRuntime,
@@ -34,6 +36,63 @@ import {
 import { getRuntimeSetupStep } from "./lib/runtime";
 import { isWorkspaceSelected } from "./lib/workspace";
 import type { InspectorTab, NavigationKey, ThemePreference } from "./types";
+
+const loadAccountPanel = () => import("./components/AccountPanel");
+const loadCommandPalette = () => import("./components/CommandPalette");
+const loadDiagnosticCenter = () => import("./components/DiagnosticCenter");
+const loadFeaturePanel = () => import("./components/FeaturePanel");
+const loadMcpPanel = () => import("./components/McpPanel");
+const loadPermissionCenter = () => import("./components/PermissionCenter");
+const loadPluginPanel = () => import("./components/PluginPanel");
+
+const AccountPanel = lazy(() =>
+  loadAccountPanel().then(({ AccountPanel }) => ({ default: AccountPanel })),
+);
+const CommandPalette = lazy(() =>
+  loadCommandPalette().then(({ CommandPalette }) => ({
+    default: CommandPalette,
+  })),
+);
+const DiagnosticCenter = lazy(() =>
+  loadDiagnosticCenter().then(({ DiagnosticCenter }) => ({
+    default: DiagnosticCenter,
+  })),
+);
+const FeaturePanel = lazy(() =>
+  loadFeaturePanel().then(({ FeaturePanel }) => ({ default: FeaturePanel })),
+);
+const McpPanel = lazy(() =>
+  loadMcpPanel().then(({ McpPanel }) => ({ default: McpPanel })),
+);
+const PermissionCenter = lazy(() =>
+  loadPermissionCenter().then(({ PermissionCenter }) => ({
+    default: PermissionCenter,
+  })),
+);
+const PluginPanel = lazy(() =>
+  loadPluginPanel().then(({ PluginPanel }) => ({ default: PluginPanel })),
+);
+
+const navigationPanelLoaders: Partial<
+  Record<NavigationKey, () => Promise<unknown>>
+> = {
+  account: loadAccountPanel,
+  diagnostics: loadDiagnosticCenter,
+  mcp: loadMcpPanel,
+  permissions: loadPermissionCenter,
+  plugins: loadPluginPanel,
+  settings: loadFeaturePanel,
+};
+
+const navigationLabelKeys: Record<NavigationKey, TranslationKey> = {
+  account: "nav.account",
+  diagnostics: "nav.diagnostics",
+  mcp: "nav.mcp",
+  permissions: "nav.permissions",
+  plugins: "nav.plugins",
+  settings: "nav.settings",
+  tasks: "nav.tasks",
+};
 
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(maximum, Math.max(minimum, value));
@@ -78,7 +137,28 @@ function Resizer({
   );
 }
 
+function NavigationPanelLoading({
+  navigation,
+}: {
+  navigation: NavigationKey;
+}) {
+  const { t } = useI18n();
+  return (
+    <main className="navigation-loading" aria-busy="true">
+      <div role="status" aria-live="polite">
+        <CircleNotch size={18} className="spin" aria-hidden="true" />
+        <span>
+          {t("navigation.loading", {
+            view: t(navigationLabelKeys[navigation]),
+          })}
+        </span>
+      </div>
+    </main>
+  );
+}
+
 export function App() {
+  const { t } = useI18n();
   const [activeNavigation, setActiveNavigation] =
     useState<NavigationKey>("tasks");
   const [inspectorTab, setInspectorTab] =
@@ -122,7 +202,10 @@ export function App() {
   );
   const setupStep = getRuntimeSetupStep(grok.runtime);
   const workspaceSwitchBlocked =
-    terminal.running || grok.anyBusy || grok.hasAnyPermission;
+    terminal.running ||
+    grok.anyBusy ||
+    grok.hasAnyPermission ||
+    taskStore.exclusiveOperation;
 
   useEffect(() => {
     const apply = () =>
@@ -162,10 +245,10 @@ export function App() {
   }, [grok.permission]);
 
   const workspaceLabel = useMemo(() => {
-    if (!isWorkspaceSelected(workspacePath)) return "Choose workspace";
+    if (!isWorkspaceSelected(workspacePath)) return t("common.chooseWorkspace");
     const parts = workspacePath.split(/[\\/]/).filter(Boolean);
     return parts.slice(-2).join("/") || workspacePath;
-  }, [workspacePath]);
+  }, [t, workspacePath]);
 
   const pickWorkspace = async () => {
     if (workspaceSwitchBlocked) return;
@@ -193,6 +276,9 @@ export function App() {
         onOpenCommandPalette={() => {
           if (!grok.permission) setCommandPaletteOpen(true);
         }}
+        onCommandPaletteIntent={() => {
+          void loadCommandPalette();
+        }}
       />
       <div
         className={`app-grid ${inspectorVisible ? "" : "inspector-is-collapsed"}`}
@@ -201,6 +287,9 @@ export function App() {
         <Sidebar
           active={activeNavigation}
           onNavigate={setActiveNavigation}
+          onNavigationIntent={(navigation) => {
+            void navigationPanelLoaders[navigation]?.();
+          }}
           workspaceLabel={workspaceLabel}
           onChooseWorkspace={() => void pickWorkspace()}
           workspaceSwitchDisabled={workspaceSwitchBlocked}
@@ -214,7 +303,11 @@ export function App() {
           runningTaskIds={grok.runningTaskIds}
           pendingPermissionTaskIds={grok.pendingPermissionTaskIds}
           attentionTaskIds={grok.attentionTaskIds}
-          taskSwitchDisabled={!workspaceReady}
+          taskSwitchDisabled={
+            !workspaceReady ||
+            !taskStore.hydrated ||
+            taskStore.exclusiveOperation
+          }
           onCreateTask={() => {
             taskStore.createTask();
             setActiveNavigation("tasks");
@@ -264,126 +357,143 @@ export function App() {
           }
         />
 
-        {activeNavigation === "tasks" ? (
-          setupStep === "ready" ? (
-            <TaskWorkspace
-              task={taskStore.activeTask}
-              busy={grok.busy}
-              runningInBackground={grok.runningInBackground}
-              onSend={grok.send}
-              onCancel={grok.cancel}
-              onRetry={grok.retry}
+        <Suspense
+          fallback={<NavigationPanelLoading navigation={activeNavigation} />}
+        >
+          {activeNavigation === "tasks" ? (
+            setupStep === "ready" ? (
+              <TaskWorkspace
+                task={taskStore.activeTask}
+                busy={grok.busy}
+                runningInBackground={grok.runningInBackground}
+                storageLocked={taskStore.exclusiveOperation}
+                storageWarning={
+                  taskStore.storageNotice ??
+                  (taskStore.storageStatus.phase === "error"
+                    ? taskStore.storageStatus.message
+                    : null)
+                }
+                onSend={grok.send}
+                onCancel={grok.cancel}
+                onRetry={grok.retry}
+                workspaceReady={workspaceReady}
+                onChooseWorkspace={() => void pickWorkspace()}
+                workspaceChangeCount={workspace.snapshot.changes.length}
+                onRunTests={() =>
+                  void grok.send(
+                    t("task.runTestsPrompt"),
+                  )
+                }
+                onReviewChanges={() => {
+                  setInspectorCollapsed(false);
+                  setInspectorTab("changes");
+                }}
+              />
+            ) : (
+              <OnboardingPanel
+                runtime={grok.runtime}
+                installing={grok.installing}
+                signingIn={grok.signingIn}
+                preview={preview}
+                onInstall={grok.installRuntime}
+                onSignIn={grok.signIn}
+                onManageSubscription={grok.manageSubscription}
+                onOpenSettings={() => setActiveNavigation("settings")}
+              />
+            )
+          ) : activeNavigation === "permissions" ? (
+            <PermissionCenter
+              events={auditStore.events}
+              tasks={searchableTasks}
               workspaceReady={workspaceReady}
-              onChooseWorkspace={() => void pickWorkspace()}
-              workspaceChangeCount={workspace.snapshot.changes.length}
-              onRunTests={() =>
-                void grok.send(
-                  "Run the relevant tests for the current changes and report any failures.",
-                )
+              preview={preview}
+              clearDisabled={
+                grok.hasAnyPermission || grok.anyBusy || terminal.running
               }
-              onReviewChanges={() => {
-                setInspectorCollapsed(false);
-                setInspectorTab("changes");
-              }}
+              onClear={auditStore.clear}
+              onChooseWorkspace={() => void pickWorkspace()}
             />
-          ) : (
-            <OnboardingPanel
-              runtime={grok.runtime}
-              installing={grok.installing}
-              signingIn={grok.signingIn}
+          ) : activeNavigation === "diagnostics" ? (
+            <DiagnosticCenter
+              workspacePath={workspacePath}
+              connected={Boolean(grok.sessionId)}
               preview={preview}
               onInstall={grok.installRuntime}
               onSignIn={grok.signIn}
-              onManageSubscription={grok.manageSubscription}
+              onConnect={grok.connect}
+              onChooseWorkspace={pickWorkspace}
+              onOpenMcp={() => setActiveNavigation("mcp")}
+            />
+          ) : activeNavigation === "plugins" ? (
+            <PluginPanel
+              workspacePath={workspacePath}
+              runtimeAvailable={grok.runtime?.available === true}
+              preview={preview}
+              connected={Boolean(grok.sessionId)}
               onOpenSettings={() => setActiveNavigation("settings")}
             />
-          )
-        ) : activeNavigation === "permissions" ? (
-          <PermissionCenter
-            events={auditStore.events}
-            tasks={searchableTasks}
-            workspaceReady={workspaceReady}
-            preview={preview}
-            clearDisabled={
-              grok.hasAnyPermission || grok.anyBusy || terminal.running
-            }
-            onClear={auditStore.clear}
-            onChooseWorkspace={() => void pickWorkspace()}
-          />
-        ) : activeNavigation === "diagnostics" ? (
-          <DiagnosticCenter
-            workspacePath={workspacePath}
-            connected={Boolean(grok.sessionId)}
-            preview={preview}
-            onInstall={grok.installRuntime}
-            onSignIn={grok.signIn}
-            onConnect={grok.connect}
-            onChooseWorkspace={pickWorkspace}
-            onOpenMcp={() => setActiveNavigation("mcp")}
-          />
-        ) : activeNavigation === "plugins" ? (
-          <PluginPanel
-            workspacePath={workspacePath}
-            runtimeAvailable={grok.runtime?.available === true}
-            preview={preview}
-            connected={Boolean(grok.sessionId)}
-            onOpenSettings={() => setActiveNavigation("settings")}
-          />
-        ) : activeNavigation === "mcp" ? (
-          <McpPanel
-            workspacePath={workspacePath}
-            runtimeAvailable={grok.runtime?.available === true}
-            preview={preview}
-            connected={Boolean(grok.sessionId)}
-            onOpenSettings={() => setActiveNavigation("settings")}
-          />
-        ) : activeNavigation === "account" ? (
-          <AccountPanel
-            runtime={grok.runtime}
-            subscription={grok.subscription}
-            connected={Boolean(grok.sessionId)}
-            signingIn={grok.signingIn}
-            subscriptionLoading={grok.subscriptionLoading}
-            workspaceReady={workspaceReady}
-            preview={preview}
-            tasks={searchableTasks}
-            onSignIn={grok.signIn}
-            onVerifySubscription={grok.verifySubscription}
-            onManageSubscription={grok.manageSubscription}
-          />
-        ) : (
-          <FeaturePanel
-            theme={theme}
-            onThemeChange={setTheme}
-            workspacePath={workspacePath}
-            onChooseWorkspace={() => void pickWorkspace()}
-            workspaceSwitchDisabled={workspaceSwitchBlocked}
-            runtime={grok.runtime}
-            connected={Boolean(grok.sessionId)}
-            installing={grok.installing}
-            modelConfiguring={grok.modelConfiguring}
-            modelCatalogLoading={grok.modelCatalogLoading}
-            modelChangeDisabled={
-              grok.busy || Boolean(grok.permission) || grok.signingIn
-            }
-            runtimeModelState={grok.runtimeModelState}
-            runtimeProfile={taskStore.activeTask?.runtimeProfile ?? null}
-            defaultRuntimeProfile={grok.defaultRuntimeProfile}
-            taskHasConversation={
-              (taskStore.activeTask?.messages.length ?? 0) > 0
-            }
-            preview={preview}
-            updateRestartBlocked={
-              grok.anyBusy || grok.hasAnyPermission || terminal.running
-            }
-            updater={updater}
-            onConnect={grok.connect}
-            onDisconnect={grok.disconnect}
-            onInstall={grok.installRuntime}
-            onConfigureRuntimeProfile={grok.configureRuntimeProfile}
-            onRefreshRuntimeModels={grok.refreshRuntimeModels}
-          />
-        )}
+          ) : activeNavigation === "mcp" ? (
+            <McpPanel
+              workspacePath={workspacePath}
+              runtimeAvailable={grok.runtime?.available === true}
+              preview={preview}
+              connected={Boolean(grok.sessionId)}
+              onOpenSettings={() => setActiveNavigation("settings")}
+            />
+          ) : activeNavigation === "account" ? (
+            <AccountPanel
+              runtime={grok.runtime}
+              subscription={grok.subscription}
+              connected={Boolean(grok.sessionId)}
+              signingIn={grok.signingIn}
+              subscriptionLoading={grok.subscriptionLoading}
+              workspaceReady={workspaceReady}
+              preview={preview}
+              tasks={searchableTasks}
+              onSignIn={grok.signIn}
+              onVerifySubscription={grok.verifySubscription}
+              onManageSubscription={grok.manageSubscription}
+            />
+          ) : (
+            <FeaturePanel
+              theme={theme}
+              onThemeChange={setTheme}
+              workspacePath={workspacePath}
+              onChooseWorkspace={() => void pickWorkspace()}
+              workspaceSwitchDisabled={workspaceSwitchBlocked}
+              runtime={grok.runtime}
+              connected={Boolean(grok.sessionId)}
+              installing={grok.installing}
+              modelConfiguring={grok.modelConfiguring}
+              modelCatalogLoading={grok.modelCatalogLoading}
+              modelChangeDisabled={
+                grok.busy || Boolean(grok.permission) || grok.signingIn
+              }
+              runtimeModelState={grok.runtimeModelState}
+              runtimeProfile={taskStore.activeTask?.runtimeProfile ?? null}
+              defaultRuntimeProfile={grok.defaultRuntimeProfile}
+              taskHasConversation={
+                (taskStore.activeTask?.messages.length ?? 0) > 0
+              }
+              taskStorageStatus={taskStore.storageStatus}
+              taskStorageNotice={taskStore.storageNotice}
+              taskCount={taskStore.taskCount}
+              taskCapacity={taskStore.taskCapacity}
+              taskStorageReady={taskStore.hydrated}
+              preview={preview}
+              updateRestartBlocked={workspaceSwitchBlocked}
+              updater={updater}
+              onConnect={grok.connect}
+              onDisconnect={grok.disconnect}
+              onInstall={grok.installRuntime}
+              onConfigureRuntimeProfile={grok.configureRuntimeProfile}
+              onRefreshRuntimeModels={grok.refreshRuntimeModels}
+              onExportTaskStore={taskStore.exportStoreBackup}
+              onRestoreTaskStore={taskStore.restoreStoreBackup}
+              onRetryTaskStorage={taskStore.retryStorage}
+            />
+          )}
+        </Suspense>
 
         {inspectorVisible ? (
           <>
@@ -419,7 +529,7 @@ export function App() {
             type="button"
             className="inspector-reveal"
             onClick={() => setInspectorCollapsed(false)}
-            aria-label="Open inspector"
+            aria-label={t("inspector.open")}
           >
             <CaretLeft size={14} />
             <SidebarSimple size={17} />
@@ -430,7 +540,11 @@ export function App() {
       {grok.error ? (
         <div className="error-toast" role="alert">
           <span>{grok.error}</span>
-          <button type="button" onClick={grok.dismissError} aria-label="Dismiss error">
+          <button
+            type="button"
+            onClick={grok.dismissError}
+            aria-label={t("toast.dismissError")}
+          >
             <X size={13} />
           </button>
         </div>
@@ -461,13 +575,13 @@ export function App() {
                 grok.dismissNotice();
               }}
             >
-              Open task
+              {t("common.openTask")}
             </button>
           ) : null}
           <button
             type="button"
             onClick={grok.dismissNotice}
-            aria-label="Close notification"
+            aria-label={t("toast.dismissNotification")}
           >
             <X size={13} />
           </button>
@@ -479,35 +593,45 @@ export function App() {
           onAnswer={grok.answerPermission}
         />
       ) : null}
-      <CommandPalette
-        open={commandPaletteOpen}
-        tasks={searchableTasks}
-        activeTaskId={taskStore.activeTaskId}
-        activeNavigation={activeNavigation}
-        taskSwitchDisabled={!workspaceReady}
-        workspaceReady={workspaceReady}
-        inspectorCollapsed={inspectorCollapsed}
-        onClose={() => setCommandPaletteOpen(false)}
-        onOpenTask={(task) => {
-          if (task.archivedAt) {
-            taskStore.restoreTask(task.id);
-          } else {
-            taskStore.selectTask(task.id);
-          }
-          setActiveNavigation("tasks");
-        }}
-        onCreateTask={() => {
-          taskStore.createTask();
-          setActiveNavigation("tasks");
-        }}
-        onChooseWorkspace={pickWorkspace}
-        onNavigate={setActiveNavigation}
-        onOpenInspector={(tab) => {
-          setInspectorTab(tab);
-          setInspectorCollapsed(false);
-        }}
-        onToggleInspector={() => setInspectorCollapsed((current) => !current)}
-      />
+      {commandPaletteOpen ? (
+        <Suspense fallback={null}>
+          <CommandPalette
+            open
+            tasks={searchableTasks}
+            activeTaskId={taskStore.activeTaskId}
+            activeNavigation={activeNavigation}
+            taskSwitchDisabled={
+              !workspaceReady ||
+              !taskStore.hydrated ||
+              taskStore.exclusiveOperation
+            }
+            workspaceReady={workspaceReady}
+            inspectorCollapsed={inspectorCollapsed}
+            onClose={() => setCommandPaletteOpen(false)}
+            onOpenTask={(task) => {
+              if (task.archivedAt) {
+                taskStore.restoreTask(task.id);
+              } else {
+                taskStore.selectTask(task.id);
+              }
+              setActiveNavigation("tasks");
+            }}
+            onCreateTask={() => {
+              taskStore.createTask();
+              setActiveNavigation("tasks");
+            }}
+            onChooseWorkspace={pickWorkspace}
+            onNavigate={setActiveNavigation}
+            onOpenInspector={(tab) => {
+              setInspectorTab(tab);
+              setInspectorCollapsed(false);
+            }}
+            onToggleInspector={() =>
+              setInspectorCollapsed((current) => !current)
+            }
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

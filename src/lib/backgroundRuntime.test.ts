@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   backgroundTaskCount,
   parseTaskScopedEvent,
+  shouldReuseTaskSession,
 } from "./backgroundRuntime";
 
 describe("task-scoped Runtime events", () => {
@@ -28,5 +29,14 @@ describe("background task counts", () => {
   it("excludes the task currently shown in the workspace", () => {
     expect(backgroundTaskCount(["task-a", "task-b"], "task-a")).toBe(1);
     expect(backgroundTaskCount(["task-a", "task-b"], null)).toBe(2);
+  });
+});
+
+describe("task session reuse", () => {
+  it("reuses a connected task unless the caller explicitly requests a restart", () => {
+    expect(shouldReuseTaskSession(true, false, false)).toBe(true);
+    expect(shouldReuseTaskSession(true, true, false)).toBe(false);
+    expect(shouldReuseTaskSession(true, false, true)).toBe(false);
+    expect(shouldReuseTaskSession(false, false, false)).toBe(false);
   });
 });

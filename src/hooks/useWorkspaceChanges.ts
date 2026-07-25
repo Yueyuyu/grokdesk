@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 import {
   discardWorkspaceChange,
   getWorkspaceDiff,
@@ -12,12 +13,10 @@ import type { WorkspaceDiff, WorkspaceSnapshot } from "../types";
 type WorkspaceAction = "stage" | "unstage" | "discard";
 
 const initialSnapshot = () =>
-  emptyWorkspaceSnapshot(
-    "unselected",
-    "Choose a project folder to inspect real workspace changes.",
-  );
+  emptyWorkspaceSnapshot("unselected", "");
 
 export function useWorkspaceChanges(workspacePath: string, busy: boolean) {
+  const { t } = useI18n();
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot>(initialSnapshot);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [diff, setDiff] = useState<WorkspaceDiff | null>(null);
@@ -123,10 +122,10 @@ export function useWorkspaceChanges(workspacePath: string, busy: boolean) {
         applySnapshot(next);
         setLastAction(
           action === "stage"
-            ? `Accepted ${path} into the Git index.`
+            ? t("changes.actionAccepted", { path })
             : action === "unstage"
-              ? `Moved ${path} back to pending changes.`
-              : `Reverted ${path}.`,
+              ? t("changes.actionPending", { path })
+              : t("changes.actionReverted", { path }),
         );
         return true;
       } catch (cause) {
@@ -136,7 +135,7 @@ export function useWorkspaceChanges(workspacePath: string, busy: boolean) {
         setActionPending(null);
       }
     },
-    [actionPending, applySnapshot, workspacePath],
+    [actionPending, applySnapshot, t, workspacePath],
   );
 
   return {

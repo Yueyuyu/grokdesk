@@ -8,6 +8,7 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useI18n } from "../i18n/I18nProvider";
 
 const markdownPlugins = [remarkGfm];
 
@@ -21,6 +22,7 @@ function textFromNode(node: ReactNode): string {
 }
 
 function CodeBlock({ children, ...props }: HTMLAttributes<HTMLPreElement>) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const firstChild = Children.toArray(children)[0];
   const className = isValidElement<{ className?: string }>(firstChild)
@@ -43,9 +45,13 @@ function CodeBlock({ children, ...props }: HTMLAttributes<HTMLPreElement>) {
     <div className="markdown-code-block">
       <div className="markdown-code-block__header">
         <span>{language || "code"}</span>
-        <button type="button" onClick={() => void copy()} aria-label="Copy code">
+        <button
+          type="button"
+          onClick={() => void copy()}
+          aria-label={t("markdown.copyCode")}
+        >
           {copied ? <Check size={13} weight="bold" /> : <Copy size={13} />}
-          {copied ? "Copied" : "Copy"}
+          {copied ? t("markdown.copied") : t("markdown.copy")}
         </button>
       </div>
       <pre {...props}>{children}</pre>

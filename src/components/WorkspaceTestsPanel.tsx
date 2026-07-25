@@ -12,6 +12,8 @@ import type {
   WorkspaceCommandSummary,
   WorkspaceTerminalController,
 } from "../hooks/useWorkspaceTerminal";
+import { useI18n } from "../i18n/I18nProvider";
+import type { TranslationKey } from "../i18n/types";
 
 interface WorkspaceTestsPanelProps {
   terminal: WorkspaceTerminalController;
@@ -19,13 +21,6 @@ interface WorkspaceTestsPanelProps {
   workspaceReady: boolean;
   onOpenTerminal: () => void;
 }
-
-const formatDuration = (durationMs: number | null) => {
-  if (durationMs === null) return "Not reported";
-  if (durationMs < 1_000) return `${durationMs} ms`;
-  if (durationMs < 60_000) return `${(durationMs / 1_000).toFixed(2)} s`;
-  return `${Math.floor(durationMs / 60_000)}m ${Math.round((durationMs % 60_000) / 1_000)}s`;
-};
 
 const getResultStatus = (result: WorkspaceCommandSummary) => {
   if (result.cancelled) return "stopped" as const;
@@ -39,11 +34,14 @@ const getResultStatus = (result: WorkspaceCommandSummary) => {
   return result.structuredTest ? ("passed" as const) : ("finished" as const);
 };
 
-const statusCopy = {
-  passed: "Passed",
-  failed: "Failed",
-  stopped: "Stopped",
-  finished: "Finished",
+const statusKeys: Record<
+  ReturnType<typeof getResultStatus>,
+  TranslationKey
+> = {
+  passed: "tests.passed",
+  failed: "common.failed",
+  stopped: "common.stopped",
+  finished: "tests.finished",
 };
 
 const ResultIcon = ({ result }: { result: WorkspaceCommandSummary }) => {
@@ -60,6 +58,28 @@ export function WorkspaceTestsPanel({
   workspaceReady,
   onOpenTerminal,
 }: WorkspaceTestsPanelProps) {
+  const { formatDate, formatNumber, t } = useI18n();
+  const formatDuration = (durationMs: number | null) => {
+    if (durationMs === null) return t("tests.notReported");
+    if (durationMs < 1_000) {
+      return t("tests.duration.milliseconds", {
+        value: formatNumber(durationMs),
+      });
+    }
+    if (durationMs < 60_000) {
+      return t("tests.duration.seconds", {
+        value: formatNumber(durationMs / 1_000, {
+          maximumFractionDigits: 2,
+        }),
+      });
+    }
+    return t("tests.duration.minutesSeconds", {
+      minutes: formatNumber(Math.floor(durationMs / 60_000)),
+      seconds: formatNumber(
+        Math.round((durationMs % 60_000) / 1_000),
+      ),
+    });
+  };
   const structuredCount = terminal.results.filter(
     (result) => result.structuredTest,
   ).length;
@@ -72,44 +92,52 @@ export function WorkspaceTestsPanel({
       <header className="workspace-tests__header">
         <span>
           <Flask size={16} />
-          <strong>Command results</strong>
+          <strong>{t("tests.commandResults")}</strong>
         </span>
         <div>
-          <span>{structuredCount} structured</span>
-          {failureCount > 0 ? <span className="is-failed">{failureCount} failed</span> : null}
+          <span>{t("tests.structuredCount", { count: structuredCount })}</span>
+          {failureCount > 0 ? (
+            <span className="is-failed">
+              {t("tests.failedCount", { count: failureCount })}
+            </span>
+          ) : null}
           <button
             type="button"
             className="icon-button"
             onClick={terminal.clearResults}
             disabled={terminal.running || terminal.results.length === 0}
-            aria-label="Clear command results"
-            title={terminal.running ? "Wait for background commands to finish" : "Clear results"}
+            aria-label={t("tests.clearResults")}
+            title={
+              terminal.running
+                ? t("tests.waitBeforeClear")
+                : t("tests.clearResults")
+            }
           >
             <Trash size={14} />
           </button>
         </div>
       </header>
       <div className="workspace-tests__note" role="note">
-        Counts are parsed only from real output in this app session. Raw terminal output is never saved.
+        {t("tests.provenanceNotice")}
       </div>
 
       {terminal.results.length === 0 ? (
         <div className="workspace-tests__empty">
           <span><Flask size={24} /></span>
-          <strong>No command results yet</strong>
+          <strong>{t("tests.emptyTitle")}</strong>
           <p>
             {preview
-              ? "Browser preview is read-only and does not generate simulated test results."
+              ? t("tests.emptyPreview")
               : workspaceReady
-                ? "Run Vitest, Cargo, Jest, or Node tests from a workspace terminal to collect a structured summary."
-                : "Choose a workspace, then run a test command from the Terminal inspector."}
+                ? t("tests.emptyReady")
+                : t("tests.emptyWorkspace")}
           </p>
           <button
             type="button"
             className="secondary-button"
             onClick={onOpenTerminal}
           >
-            Open Terminal
+            {t("tests.openTerminal")}
           </button>
         </div>
       ) : (
@@ -130,31 +158,70 @@ export function WorkspaceTestsPanel({
                   <div className="workspace-test-result__title">
                     <code title={result.command}>{result.command}</code>
                     <span className={`test-status-badge test-status-badge--${status}`}>
-                      {statusCopy[status]}
+                      {t(statusKeys[status])}
                     </span>
                   </div>
                   <div className="workspace-test-result__meta">
                     <span>{result.terminalTitle}</span>
-                    <span>{new Date(result.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                    <span>Exit {result.exitCode ?? "—"}</span>
+                    <span>
+                      {formatDate(result.completedAt, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                    <span>
+                      {t("tests.exitCode", {
+                        code: result.exitCode ?? "—",
+                      })}
+                    </span>
                     <span><Clock size={11} /> {formatDuration(result.durationMs)}</span>
                   </div>
 
                   {test ? (
                     <div className="workspace-test-result__counts">
                       <span className="test-framework">{test.framework}</span>
-                      {test.passed !== null ? <span className="is-passed">{test.passed} passed</span> : null}
-                      {test.failed !== null ? <span className="is-failed">{test.failed} failed</span> : null}
-                      {test.skipped !== null ? <span>{test.skipped} skipped</span> : null}
-                      {test.suitesPassed !== null ? <span>{test.suitesPassed} suites passed</span> : null}
-                      {test.suitesFailed !== null ? <span>{test.suitesFailed} suites failed</span> : null}
+                      {test.passed !== null ? (
+                        <span className="is-passed">
+                          {t("tests.passedCount", { count: test.passed })}
+                        </span>
+                      ) : null}
+                      {test.failed !== null ? (
+                        <span className="is-failed">
+                          {t("tests.failedCount", { count: test.failed })}
+                        </span>
+                      ) : null}
+                      {test.skipped !== null ? (
+                        <span>
+                          {t("tests.skippedCount", { count: test.skipped })}
+                        </span>
+                      ) : null}
+                      {test.suitesPassed !== null ? (
+                        <span>
+                          {t("tests.suitesPassed", {
+                            count: test.suitesPassed,
+                          })}
+                        </span>
+                      ) : null}
+                      {test.suitesFailed !== null ? (
+                        <span>
+                          {t("tests.suitesFailed", {
+                            count: test.suitesFailed,
+                          })}
+                        </span>
+                      ) : null}
                       {test.reportedDurationMs !== null ? (
-                        <span>Runner {formatDuration(test.reportedDurationMs)}</span>
+                        <span>
+                          {t("tests.runnerDuration", {
+                            duration: formatDuration(
+                              test.reportedDurationMs,
+                            ),
+                          })}
+                        </span>
                       ) : null}
                     </div>
                   ) : (
                     <p className="workspace-test-result__unstructured">
-                      No structured result was detected. GrokDesk does not guess from the command name or exit code.
+                      {t("tests.unstructured")}
                     </p>
                   )}
                 </div>
@@ -166,8 +233,14 @@ export function WorkspaceTestsPanel({
                     terminal.setActiveTabId(result.terminalId);
                     onOpenTerminal();
                   }}
-                  aria-label={`Open ${result.terminalTitle}`}
-                  title={tabAvailable ? "Open terminal output" : "This terminal has been closed"}
+                  aria-label={t("tests.openAria", {
+                    title: result.terminalTitle,
+                  })}
+                  title={
+                    tabAvailable
+                      ? t("tests.openOutput")
+                      : t("tests.terminalClosed")
+                  }
                 >
                   <ArrowSquareOut size={15} />
                 </button>

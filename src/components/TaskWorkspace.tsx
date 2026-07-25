@@ -14,11 +14,23 @@ import {
   Play,
   SpinnerGap,
   UserCircle,
+  WarningCircle,
   Wrench,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import appIcon from "../assets/grokdesk-icon.png";
+import { useI18n } from "../i18n/I18nProvider";
+import type { TranslationKey } from "../i18n/types";
 import { formatAttachmentSize } from "../lib/attachments";
+import {
+  fallbackPlanPriority,
+  fallbackPlanStepNumber,
+  isFallbackPlanUpdate,
+  isFallbackRuntimeTool,
+  previewToolTargetTranslationKey,
+  runtimeToolActionTranslationKey,
+} from "../lib/localizedRuntimeUi";
+import { localizeTaskTitle } from "../lib/tasks";
 import type {
   ChatEntry,
   GrokTask,
@@ -27,12 +39,19 @@ import type {
   ToolActivity,
 } from "../types";
 import { Composer } from "./Composer";
-import { MarkdownContent } from "./MarkdownContent";
+
+const MarkdownContent = lazy(() =>
+  import("./MarkdownContent").then(({ MarkdownContent }) => ({
+    default: MarkdownContent,
+  })),
+);
 
 interface TaskWorkspaceProps {
   task: GrokTask | null;
   busy: boolean;
   runningInBackground: number;
+  storageLocked: boolean;
+  storageWarning: string | null;
   onSend: (text: string, attachments: PromptAttachment[]) => Promise<void>;
   onCancel: () => Promise<void>;
   onRetry: () => Promise<void>;
@@ -44,6 +63,7 @@ interface TaskWorkspaceProps {
 }
 
 function Message({ entry }: { entry: ChatEntry }) {
+  const { formatDate, locale, t } = useI18n();
   const isAgent = entry.role === "agent";
   return (
     <article className={`message message--${entry.role}`}>
@@ -63,18 +83,39 @@ function Message({ entry }: { entry: ChatEntry }) {
       )}
       <div className="message__body">
         <header>
-          <strong>{entry.name}</strong>
-          <time>{entry.time}</time>
+          <strong>{isAgent ? entry.name : t("task.you")}</strong>
+          <time>
+            {entry.createdAt
+              ? formatDate(entry.createdAt, {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                })
+              : entry.time}
+          </time>
         </header>
         {isAgent ? (
-          <MarkdownContent
-            content={entry.content || (entry.streaming ? "Thinking…" : "")}
-          />
+          <Suspense
+            fallback={
+              <p className="message__plain message__rendering" role="status">
+                {t("task.renderingResponse")}
+              </p>
+            }
+          >
+            <MarkdownContent
+              content={
+                entry.content || (entry.streaming ? t("task.thinking") : "")
+              }
+            />
+          </Suspense>
         ) : entry.content ? (
           <p className="message__plain">{entry.content}</p>
         ) : null}
         {entry.attachments && entry.attachments.length > 0 ? (
-          <div className="message-attachments" aria-label="Message attachments">
+          <div
+            className="message-attachments"
+            aria-label={t("task.messageAttachments")}
+          >
             {entry.attachments.map((attachment, index) => (
               <span
                 className="message-attachment"
@@ -87,13 +128,16 @@ function Message({ entry }: { entry: ChatEntry }) {
                   <File size={15} />
                 )}
                 <span>{attachment.name}</span>
-                <small>{formatAttachmentSize(attachment.size)}</small>
+                <small>{formatAttachmentSize(attachment.size, locale)}</small>
               </span>
             ))}
           </div>
         ) : null}
         {entry.streaming ? (
-          <span className="streaming-caret" aria-label="Streaming" />
+          <span
+            className="streaming-caret"
+            aria-label={t("task.streaming")}
+          />
         ) : null}
       </div>
     </article>
@@ -101,44 +145,68 @@ function Message({ entry }: { entry: ChatEntry }) {
 }
 
 function PlanCard({ steps }: { steps: PlanStep[] }) {
+  const { formatNumber, t } = useI18n();
   return (
-    <section className="activity-module plan-module" aria-label="Execution plan">
-      <h2>Plan</h2>
+    <section
+      className="activity-module plan-module"
+      aria-label={t("task.executionPlan")}
+    >
+      <h2>{t("task.plan")}</h2>
       <ol>
-        {steps.map((step, index) => (
-          <li key={step.id} className={`plan-step plan-step--${step.status}`}>
-            <span className="plan-step__rail" aria-hidden="true">
-              <span className="plan-step__marker">
-                {step.status === "complete" ? (
-                  <Check size={14} weight="bold" />
-                ) : step.status === "active" ? (
-                  <span className="plan-step__active-square" />
-                ) : (
-                  index + 1
-                )}
+        {steps.map((step, index) => {
+          const fallbackStepNumber = fallbackPlanStepNumber(step.title);
+          const fallbackPriority = step.detail
+            ? fallbackPlanPriority(step.detail)
+            : null;
+          const title =
+            fallbackStepNumber === null
+              ? step.title
+              : t("runtime.plan.step", {
+                  number: formatNumber(fallbackStepNumber),
+                });
+          const detail = !step.detail
+            ? null
+            : isFallbackPlanUpdate(step.detail)
+              ? t("runtime.plan.updatedBy")
+              : fallbackPriority
+                ? t("runtime.plan.priority", { priority: fallbackPriority })
+                : step.detail;
+          return (
+            <li key={step.id} className={`plan-step plan-step--${step.status}`}>
+              <span className="plan-step__rail" aria-hidden="true">
+                <span className="plan-step__marker">
+                  {step.status === "complete" ? (
+                    <Check size={14} weight="bold" />
+                  ) : step.status === "active" ? (
+                    <span className="plan-step__active-square" />
+                  ) : (
+                    index + 1
+                  )}
+                </span>
               </span>
-            </span>
-            <span className="plan-step__copy">
-              <strong>{step.title}</strong>
-              {step.detail ? <small>{step.detail}</small> : null}
-            </span>
-          </li>
-        ))}
+              <span className="plan-step__copy">
+                <strong>{title}</strong>
+                {detail ? <small>{detail}</small> : null}
+              </span>
+            </li>
+          );
+        })}
       </ol>
     </section>
   );
 }
 
 const toolIcons = {
-  Read: FileText,
-  Edit: PencilSimple,
-  Write: Code,
-  Test: Flask,
-  Run: Wrench,
-  Update: Wrench,
+  edit: PencilSimple,
+  read: FileText,
+  run: Wrench,
+  test: Flask,
+  update: Wrench,
+  write: Code,
 };
 
 function ToolsCard({ tools }: { tools: ToolActivity[] }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const visibleTools = expanded ? tools : tools.slice(-5);
   const activeCount = tools.filter((tool) => tool.status === "active").length;
@@ -146,15 +214,20 @@ function ToolsCard({ tools }: { tools: ToolActivity[] }) {
   return (
     <section
       className={`activity-module tools-module ${expanded ? "is-expanded" : ""}`}
-      aria-label="Tool activity"
+      aria-label={t("task.toolActivity")}
     >
       <header className="tools-module__header">
-        <h2>Tools</h2>
+        <h2>{t("task.tools")}</h2>
         <div className="tools-module__meta">
           <span aria-live="polite">
             {activeCount > 0
-              ? `${activeCount} running`
-              : `${tools.length} ${tools.length === 1 ? "activity" : "activities"}`}
+              ? t("task.toolsRunning", { count: activeCount })
+              : t(
+                  tools.length === 1
+                    ? "task.toolActivityCount.one"
+                    : "task.toolActivityCount.other",
+                  { count: tools.length },
+                )}
           </span>
           {expanded ? (
             <button
@@ -163,7 +236,7 @@ function ToolsCard({ tools }: { tools: ToolActivity[] }) {
               onClick={() => setExpanded(false)}
               aria-expanded="true"
             >
-              Show latest
+              {t("task.showLatest")}
               <CaretRight size={11} weight="bold" />
             </button>
           ) : null}
@@ -171,15 +244,25 @@ function ToolsCard({ tools }: { tools: ToolActivity[] }) {
       </header>
       <div className="tool-strip">
         {visibleTools.map((tool) => {
-          const Icon = toolIcons[tool.action as keyof typeof toolIcons] || Wrench;
+          const normalizedAction = tool.action.trim().toLocaleLowerCase();
+          const Icon =
+            toolIcons[normalizedAction as keyof typeof toolIcons] || Wrench;
+          const actionKey = runtimeToolActionTranslationKey(tool.action);
+          const targetKey = previewToolTargetTranslationKey(tool.id);
+          const action = actionKey ? t(actionKey) : tool.action;
+          const target = targetKey
+            ? t(targetKey)
+            : isFallbackRuntimeTool(tool.target)
+              ? t("runtime.tool.fallback")
+              : tool.target;
           return (
             <div className={`tool-item tool-item--${tool.status}`} key={tool.id}>
               <span className="tool-item__title">
                 <Icon size={15} />
-                {tool.action}
+                {action}
               </span>
-              <span className="tool-item__target" title={tool.target}>
-                {tool.target}
+              <span className="tool-item__target" title={target}>
+                {target}
               </span>
               <span className="tool-progress">
                 <span style={{ width: `${tool.progress}%` }} />
@@ -194,7 +277,9 @@ function ToolsCard({ tools }: { tools: ToolActivity[] }) {
             onClick={() => setExpanded((current) => !current)}
             aria-expanded={expanded}
           >
-            {expanded ? "Show latest" : `${tools.length - 5} more`}
+            {expanded
+              ? t("task.showLatest")
+              : t("task.moreTools", { count: tools.length - 5 })}
             <CaretRight size={11} weight="bold" />
           </button>
         ) : null}
@@ -203,17 +288,19 @@ function ToolsCard({ tools }: { tools: ToolActivity[] }) {
   );
 }
 
-const statusLabels: Record<GrokTask["status"], string> = {
-  idle: "Ready",
-  running: "Working",
-  complete: "Complete",
-  error: "Needs attention",
+const statusLabelKeys: Record<GrokTask["status"], TranslationKey> = {
+  idle: "task.status.ready",
+  running: "task.status.working",
+  complete: "common.complete",
+  error: "task.status.needsAttention",
 };
 
 export function TaskWorkspace({
   task,
   busy,
   runningInBackground,
+  storageLocked,
+  storageWarning,
   onSend,
   onCancel,
   onRetry,
@@ -223,6 +310,7 @@ export function TaskWorkspace({
   onRunTests,
   onReviewChanges,
 }: TaskWorkspaceProps) {
+  const { t } = useI18n();
   const scrollArea = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
@@ -267,19 +355,31 @@ export function TaskWorkspace({
     <main className="task-workspace">
       <header className="task-header">
         <div>
-          <h1>{workspaceReady ? task?.title ?? "Preparing task…" : "Choose a project folder"}</h1>
+          <h1>
+            {workspaceReady
+              ? task
+                ? localizeTaskTitle(task.title, t("sidebar.newTask"))
+                : t("task.preparing")
+              : t("task.chooseProjectFolder")}
+          </h1>
           <p>
             Grok Build <span>·</span> ACP <span>·</span>{" "}
             <strong
               className={`task-status task-status--${task?.status ?? "idle"}`}
             >
               {!workspaceReady
-                ? "Workspace required"
+                ? t("task.workspaceRequired")
                 : task
-                  ? statusLabels[task.status]
-                  : "Loading"}
+                  ? t(statusLabelKeys[task.status])
+                  : t("common.loading")}
             </strong>
           </p>
+          {storageWarning ? (
+            <div className="task-storage-warning" role="alert">
+              <WarningCircle size={13} weight="fill" />
+              <span>{storageWarning}</span>
+            </div>
+          ) : null}
           {runningInBackground > 0 ? (
             <p
               className="background-task-indicator"
@@ -287,9 +387,12 @@ export function TaskWorkspace({
               aria-live="polite"
             >
               <SpinnerGap size={13} weight="bold" className="spin" />
-              {runningInBackground} other{" "}
-              {runningInBackground === 1 ? "task is" : "tasks are"} running in
-              the background
+              {t(
+                runningInBackground === 1
+                  ? "task.backgroundRunning.one"
+                  : "task.backgroundRunning.other",
+                { count: runningInBackground },
+              )}
             </p>
           ) : null}
         </div>
@@ -299,20 +402,20 @@ export function TaskWorkspace({
               type="button"
               className="secondary-button"
               onClick={() => void onRetry()}
-              disabled={busy || !workspaceReady}
+              disabled={busy || storageLocked || !workspaceReady}
             >
               <ArrowClockwise size={16} />
-              Retry
+              {t("common.retry")}
             </button>
           ) : null}
           <button
             type="button"
             className="secondary-button"
             onClick={onRunTests}
-            disabled={!task || busy || !workspaceReady}
+            disabled={!task || busy || storageLocked || !workspaceReady}
           >
             <Play size={16} />
-            Run tests
+            {t("task.runTests")}
           </button>
           <button
             type="button"
@@ -320,7 +423,8 @@ export function TaskWorkspace({
             onClick={onReviewChanges}
           >
             <Code size={16} />
-            Review changes{workspaceChangeCount > 0 ? ` · ${workspaceChangeCount}` : ""}
+            {t("task.reviewChanges")}
+            {workspaceChangeCount > 0 ? ` · ${workspaceChangeCount}` : ""}
           </button>
         </div>
       </header>
@@ -333,24 +437,30 @@ export function TaskWorkspace({
         >
           <div className="conversation">
             {!workspaceReady ? (
-              <section className="conversation-empty" aria-label="Choose workspace">
+              <section
+                className="conversation-empty"
+                aria-label={t("common.chooseWorkspace")}
+              >
                 <span>
                   <FolderOpen size={24} />
                 </span>
-                <h2>Open a project workspace</h2>
-                <p>Grok Build will run only inside the folder you explicitly choose.</p>
+                <h2>{t("task.openWorkspace")}</h2>
+                <p>{t("task.openWorkspaceDescription")}</p>
                 <button type="button" className="primary-button" onClick={onChooseWorkspace}>
                   <FolderOpen size={15} />
-                  Choose folder
+                  {t("common.chooseFolder")}
                 </button>
               </section>
             ) : messages.length === 0 ? (
-              <section className="conversation-empty" aria-label="New task">
+              <section
+                className="conversation-empty"
+                aria-label={t("sidebar.newTask")}
+              >
                 <span>
                   <ChatCircleDots size={24} />
                 </span>
-                <h2>Start a new task</h2>
-                <p>Describe what you want Grok Build to do in this workspace.</p>
+                <h2>{t("task.startNew")}</h2>
+                <p>{t("task.startNewDescription")}</p>
               </section>
             ) : (
               messages.map((entry) => <Message entry={entry} key={entry.id} />)
@@ -358,7 +468,7 @@ export function TaskWorkspace({
             {plan.length > 0 ? <PlanCard steps={plan} /> : null}
             {busy ? (
               <div className="running-row">
-                <em>Grok Build is working…</em>
+                <em>{t("task.grokWorking")}</em>
                 <SpinnerGap size={18} weight="bold" className="spin" />
               </div>
             ) : null}
@@ -371,7 +481,7 @@ export function TaskWorkspace({
             onClick={() => scrollToLatest("smooth")}
           >
             <ArrowDown size={14} weight="bold" />
-            Back to latest
+            {t("task.backToLatest")}
           </button>
         ) : null}
       </div>
@@ -385,7 +495,7 @@ export function TaskWorkspace({
         <div className="composer-dock">
           <Composer
             busy={busy}
-            disabled={!task || !workspaceReady}
+            disabled={!task || storageLocked || !workspaceReady}
             onSend={onSend}
             onCancel={onCancel}
           />

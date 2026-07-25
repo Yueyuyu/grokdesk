@@ -220,8 +220,9 @@ export async function fetchGrokSubscription(taskId: string): Promise<GrokSubscri
       tier: null,
       creditUsagePercent: null,
       periodEnd: null,
-      message:
-        "Browser preview only: no real Grok account, subscription, or quota data is available.",
+      // 预览提示属于 GrokDesk 界面文案，由调用方按当前语言生成。
+      // 桌面 Runtime 返回的原始 billing message 仍保持不变。
+      message: null,
     };
   }
   return invoke<GrokSubscription>("fetch_grok_subscription", { taskId });
@@ -240,8 +241,7 @@ export async function listGrokPlugins(cwd: string): Promise<GrokPluginCatalog> {
     return {
       plugins: [],
       marketplaceAvailable: false,
-      message:
-        "浏览器预览不会读取或模拟本机插件；安装版会直接显示官方 Grok Runtime 的真实结果。",
+      message: null,
     };
   }
   return invoke<GrokPluginCatalog>("list_grok_plugins", {
@@ -312,8 +312,7 @@ export async function listGrokMcpServers(cwd: string): Promise<GrokMcpCatalog> {
   if (!isDesktopRuntime()) {
     return {
       servers: [],
-      message:
-        "浏览器预览不会读取或模拟本机 MCP 配置；安装版会直接显示官方 Grok Runtime 的真实结果。",
+      message: null,
     };
   }
   return invoke<GrokMcpCatalog>("list_grok_mcp_servers", {

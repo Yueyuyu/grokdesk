@@ -16,12 +16,15 @@ import {
   useRef,
   useState,
 } from "react";
+import { useI18n } from "../i18n/I18nProvider";
+import type { TranslationKey } from "../i18n/types";
 import { inspectGrokContext } from "../lib/desktop";
 import {
   filterRuntimeSkills,
   formatContextBytes,
   formatContextTokens,
 } from "../lib/runtimeContext";
+import { localizeTaskTitle } from "../lib/tasks";
 import type {
   GrokTask,
   PromptCapabilities,
@@ -42,14 +45,11 @@ interface RuntimeContextPanelProps {
   onReconnect: () => Promise<unknown>;
 }
 
-const capabilityLabel = (supported: boolean | undefined) => {
-  if (supported === undefined) return "Start ACP to inspect";
-  return supported ? "Supported" : "Not reported";
-};
-
-const trustLabel = (trusted: boolean | null) => {
-  if (trusted === null) return "trust not reported";
-  return trusted ? "trusted workspace" : "workspace not trusted";
+const taskStatusKeys: Record<GrokTask["status"], TranslationKey> = {
+  idle: "context.taskStatus.idle",
+  running: "common.running",
+  complete: "common.complete",
+  error: "common.error",
 };
 
 const errorMessage = (cause: unknown) =>
@@ -68,6 +68,7 @@ export function RuntimeContextPanel({
   onOpenSettings,
   onReconnect,
 }: RuntimeContextPanelProps) {
+  const { formatNumber, locale, t } = useI18n();
   const [snapshot, setSnapshot] = useState<RuntimeContextSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
@@ -76,6 +77,16 @@ export function RuntimeContextPanel({
   const [notice, setNotice] = useState<string | null>(null);
   const requestIdRef = useRef(0);
   const deferredQuery = useDeferredValue(query);
+  const capabilityLabel = (supported: boolean | undefined) => {
+    if (supported === undefined) return t("context.startAcpToInspect");
+    return supported ? t("context.supported") : t("context.notReported");
+  };
+  const trustLabel = (trusted: boolean | null) => {
+    if (trusted === null) return t("context.trustNotReported");
+    return trusted
+      ? t("context.trustedWorkspace")
+      : t("context.untrustedWorkspace");
+  };
 
   const refresh = useCallback(async () => {
     if (preview || !workspaceReady || !runtimeAvailable) {
@@ -115,7 +126,7 @@ export function RuntimeContextPanel({
     setNotice(null);
     try {
       await onReconnect();
-      setNotice("ACP reconnected with the current Runtime context.");
+      setNotice(t("context.reconnected"));
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -127,11 +138,8 @@ export function RuntimeContextPanel({
     return (
       <div className="context-panel context-panel--empty">
         <span><ShieldCheck size={21} /></span>
-        <strong>No simulated Runtime context</strong>
-        <p>
-          The browser preview does not invent Skills, project instructions,
-          configuration, ACP capabilities, or session identifiers.
-        </p>
+        <strong>{t("context.previewTitle")}</strong>
+        <p>{t("context.previewDescription")}</p>
       </div>
     );
   }
@@ -140,10 +148,10 @@ export function RuntimeContextPanel({
     return (
       <div className="context-panel context-panel--empty">
         <span><FileText size={21} /></span>
-        <strong>Choose a workspace</strong>
-        <p>Runtime context is discovered for the selected project folder.</p>
+        <strong>{t("common.chooseWorkspace")}</strong>
+        <p>{t("context.chooseWorkspaceDescription")}</p>
         <button type="button" className="primary-button" onClick={onChooseWorkspace}>
-          Choose workspace
+          {t("common.chooseWorkspace")}
         </button>
       </div>
     );
@@ -153,10 +161,10 @@ export function RuntimeContextPanel({
     return (
       <div className="context-panel context-panel--empty">
         <span><PuzzlePiece size={21} /></span>
-        <strong>Official Runtime required</strong>
-        <p>Install Grok Runtime before reading its real project context and Skills.</p>
+        <strong>{t("context.runtimeRequired")}</strong>
+        <p>{t("context.runtimeRequiredDescription")}</p>
         <button type="button" className="primary-button" onClick={onOpenSettings}>
-          Open Settings
+          {t("common.openSettings")}
         </button>
       </div>
     );
@@ -166,8 +174,8 @@ export function RuntimeContextPanel({
     return (
       <div className="context-panel context-panel--empty">
         <span><SpinnerGap size={21} className="spin" /></span>
-        <strong>Reading Runtime context</strong>
-        <p>GrokDesk is querying the official CLI for this workspace.</p>
+        <strong>{t("context.reading")}</strong>
+        <p>{t("context.readingDescription")}</p>
       </div>
     );
   }
@@ -176,25 +184,32 @@ export function RuntimeContextPanel({
     return (
       <div className="context-panel context-panel--empty">
         <span><ShareNetwork size={21} /></span>
-        <strong>Runtime context unavailable</strong>
-        <p>{error || "The official CLI did not return a readable context snapshot."}</p>
+        <strong>{t("context.unavailable")}</strong>
+        <p>{error || t("context.unavailableDescription")}</p>
         <button type="button" className="secondary-button" onClick={() => void refresh()}>
-          Try again
+          {t("common.retry")}
         </button>
       </div>
     );
   }
 
   const counts = snapshot.counts;
+  const taskTitle = task
+    ? localizeTaskTitle(task.title, t("sidebar.newTask"))
+    : null;
 
   return (
     <div className="context-panel">
       <header className="context-panel__header">
         <div>
-          <span className="context-eyebrow">Official Runtime discovery</span>
+          <span className="context-eyebrow">
+            {t("context.officialDiscovery")}
+          </span>
           <strong>Grok {snapshot.grokVersion}</strong>
           <small>
-            {snapshot.channel === "unknown" ? "Default channel" : snapshot.channel}
+            {snapshot.channel === "unknown"
+              ? t("context.defaultChannel")
+              : snapshot.channel}
             {` · ${trustLabel(snapshot.projectTrusted)}`}
           </small>
         </div>
@@ -203,7 +218,7 @@ export function RuntimeContextPanel({
           className="icon-button"
           onClick={() => void refresh()}
           disabled={loading || reconnecting}
-          aria-label="Refresh Runtime context"
+          aria-label={t("context.refreshAria")}
         >
           <ArrowClockwise size={16} className={loading ? "spin" : undefined} />
         </button>
@@ -214,18 +229,57 @@ export function RuntimeContextPanel({
 
       <section className="context-section">
         <div className="context-section__heading">
-          <h2>Active task and ACP</h2>
-          <span className={connected ? "is-connected" : ""}>{connected ? "Connected" : "Not connected"}</span>
+          <h2>{t("context.activeTask")}</h2>
+          <span className={connected ? "is-connected" : ""}>
+            {connected ? t("common.connected") : t("common.disconnected")}
+          </span>
         </div>
         <dl className="context-facts">
-          <div><dt>Task</dt><dd title={task?.title}>{task?.title || "No active task"}</dd></div>
-          <div><dt>Status</dt><dd>{task?.status || "idle"}</dd></div>
-          <div><dt>Saved context</dt><dd>{task ? `${task.messages.length} messages · ${task.plan.length} plan steps · ${task.tools.length} tools` : "None"}</dd></div>
+          <div>
+            <dt>{t("context.task")}</dt>
+            <dd title={taskTitle ?? undefined}>
+              {taskTitle || t("context.noActiveTask")}
+            </dd>
+          </div>
+          <div>
+            <dt>{t("context.status")}</dt>
+            <dd>
+              {task
+                ? t(taskStatusKeys[task.status])
+                : t("context.taskStatus.idle")}
+            </dd>
+          </div>
+          <div>
+            <dt>{t("context.savedContext")}</dt>
+            <dd>
+              {task
+                ? t("context.savedContextSummary", {
+                    messages: formatNumber(task.messages.length),
+                    plans: formatNumber(task.plan.length),
+                    tools: formatNumber(task.tools.length),
+                  })
+                : t("common.none")}
+            </dd>
+          </div>
         </dl>
-        <div className="context-capabilities" aria-label="ACP prompt capabilities">
-          <div><span>Images</span><strong>{capabilityLabel(promptCapabilities?.image)}</strong></div>
-          <div><span>Audio</span><strong>{capabilityLabel(promptCapabilities?.audio)}</strong></div>
-          <div><span>Embedded context</span><strong>{capabilityLabel(promptCapabilities?.embeddedContext)}</strong></div>
+        <div
+          className="context-capabilities"
+          aria-label={t("context.promptCapabilities")}
+        >
+          <div>
+            <span>{t("context.images")}</span>
+            <strong>{capabilityLabel(promptCapabilities?.image)}</strong>
+          </div>
+          <div>
+            <span>{t("context.audio")}</span>
+            <strong>{capabilityLabel(promptCapabilities?.audio)}</strong>
+          </div>
+          <div>
+            <span>{t("context.embeddedContext")}</span>
+            <strong>
+              {capabilityLabel(promptCapabilities?.embeddedContext)}
+            </strong>
+          </div>
         </div>
         <button
           type="button"
@@ -234,17 +288,23 @@ export function RuntimeContextPanel({
           onClick={() => void reconnect()}
         >
           {reconnecting ? <SpinnerGap size={14} className="spin" /> : <ArrowClockwise size={14} />}
-          {reconnecting ? "Reconnecting…" : connected ? "Reconnect ACP" : "Start ACP"}
+          {reconnecting
+            ? t("context.reconnecting")
+            : connected
+              ? t("context.reconnect")
+              : t("context.startAcp")}
         </button>
       </section>
 
       <section className="context-section">
         <div className="context-section__heading">
-          <h2>Project instructions</h2>
-          <span>{snapshot.projectInstructions.length}</span>
+          <h2>{t("context.projectInstructions")}</h2>
+          <span>{formatNumber(snapshot.projectInstructions.length)}</span>
         </div>
         {snapshot.projectInstructions.length === 0 ? (
-          <p className="context-section__empty">The Runtime reported no project instruction files.</p>
+          <p className="context-section__empty">
+            {t("context.noProjectInstructions")}
+          </p>
         ) : (
           <div className="context-instruction-list">
             {snapshot.projectInstructions.map((instruction) => (
@@ -254,7 +314,15 @@ export function RuntimeContextPanel({
                   <strong title={instruction.path}>{instruction.path}</strong>
                   <span>{instruction.scope} · {instruction.fileType.replaceAll("_", " ")}</span>
                 </div>
-                <small>{formatContextBytes(instruction.sizeBytes)}<br />{formatContextTokens(instruction.approxTokens)}</small>
+                <small>
+                  {formatContextBytes(instruction.sizeBytes, locale)}
+                  <br />
+                  {formatContextTokens(
+                    instruction.approxTokens,
+                    locale,
+                    t("context.tokens"),
+                  )}
+                </small>
               </article>
             ))}
           </div>
@@ -263,8 +331,8 @@ export function RuntimeContextPanel({
 
       <section className="context-section context-skills-section">
         <div className="context-section__heading">
-          <h2>Discovered Skills</h2>
-          <span>{snapshot.skills.length}</span>
+          <h2>{t("context.discoveredSkills")}</h2>
+          <span>{formatNumber(snapshot.skills.length)}</span>
         </div>
         <label className="context-search">
           <MagnifyingGlass size={14} />
@@ -272,17 +340,23 @@ export function RuntimeContextPanel({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Filter Runtime Skills"
-            aria-label="Filter Runtime Skills"
+            placeholder={t("context.filterSkills")}
+            aria-label={t("context.filterSkills")}
           />
           {query ? (
-            <button type="button" onClick={() => setQuery("")} aria-label="Clear Skills filter">
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label={t("context.clearSkillsFilter")}
+            >
               <X size={12} />
             </button>
           ) : null}
         </label>
         {visibleSkills.length === 0 ? (
-          <p className="context-section__empty">No Runtime Skills match this filter.</p>
+          <p className="context-section__empty">
+            {t("context.noMatchingSkills")}
+          </p>
         ) : (
           <div className="context-skill-list" aria-live="polite">
             {visibleSkills.map((skill) => (
@@ -290,8 +364,15 @@ export function RuntimeContextPanel({
                 <span><PuzzlePiece size={15} /></span>
                 <div>
                   <strong>{skill.name}</strong>
-                  <p>{skill.description || "The Runtime did not provide a description."}</p>
-                  <small>{skill.sourceType} · {skill.userInvocable ? "user-invocable" : "Runtime-only"}</small>
+                  <p>
+                    {skill.description || t("context.noSkillDescription")}
+                  </p>
+                  <small>
+                    {skill.sourceType} ·{" "}
+                    {skill.userInvocable
+                      ? t("context.userInvocable")
+                      : t("context.runtimeOnly")}
+                  </small>
                 </div>
               </article>
             ))}
@@ -301,24 +382,30 @@ export function RuntimeContextPanel({
 
       <section className="context-section">
         <div className="context-section__heading">
-          <h2>Runtime composition</h2>
-          <span>Current workspace</span>
+          <h2>{t("context.runtimeComposition")}</h2>
+          <span>{t("context.currentWorkspace")}</span>
         </div>
         <div className="context-count-grid">
-          <div><strong>{counts.agents}</strong><span>Agents</span></div>
-          <div><strong>{counts.plugins}</strong><span>Plugins</span></div>
-          <div><strong>{counts.mcpServers}</strong><span>MCP</span></div>
-          <div><strong>{counts.hooks}</strong><span>Hooks</span></div>
-          <div><strong>{counts.lspServers}</strong><span>LSP</span></div>
-          <div><strong>{counts.configLayers}</strong><span>Config layers</span></div>
+          <div><strong>{formatNumber(counts.agents)}</strong><span>{t("context.agents")}</span></div>
+          <div><strong>{formatNumber(counts.plugins)}</strong><span>{t("nav.plugins")}</span></div>
+          <div><strong>{formatNumber(counts.mcpServers)}</strong><span>MCP</span></div>
+          <div><strong>{formatNumber(counts.hooks)}</strong><span>{t("context.hooks")}</span></div>
+          <div><strong>{formatNumber(counts.lspServers)}</strong><span>LSP</span></div>
+          <div><strong>{formatNumber(counts.configLayers)}</strong><span>{t("context.configLayers")}</span></div>
         </div>
         <p className="context-permission-summary">
-          Permissions: {counts.permissionRulesLoaded} loaded · {counts.permissionRulesSkipped} skipped · {counts.permissionSources} sources
+          {t("context.permissionsSummary", {
+            loaded: formatNumber(counts.permissionRulesLoaded),
+            skipped: formatNumber(counts.permissionRulesSkipped),
+            sources: formatNumber(counts.permissionSources),
+          })}
         </p>
       </section>
 
       <section className="context-note">
-        This view projects safe metadata from <code>grok inspect --json</code> and excludes credential values, absolute source paths, MCP names, endpoints, and headers. Refresh reads discovery again; reconnect ACP to apply changed instructions, Skills, Plugins, or MCP configuration.
+        {t("context.safetyNote.before")}{" "}
+        <code>grok inspect --json</code>{" "}
+        {t("context.safetyNote.after")}
       </section>
     </div>
   );

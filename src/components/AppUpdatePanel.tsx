@@ -7,6 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import { useState } from "react";
 import type { AppUpdateController } from "../hooks/useAppUpdate";
+import { useI18n } from "../i18n/I18nProvider";
 import { formatUpdateSize } from "../lib/appUpdate";
 
 interface AppUpdatePanelProps {
@@ -17,19 +18,12 @@ interface AppUpdatePanelProps {
 
 type Confirmation = "download" | "install" | null;
 
-const formatCheckedAt = (value: string | null) => {
-  if (!value) return "Not checked yet";
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-};
-
 export function AppUpdatePanel({
   preview,
   restartBlocked,
   updater,
 }: AppUpdatePanelProps) {
+  const { formatDate, formatNumber, locale, t } = useI18n();
   const [confirmation, setConfirmation] = useState<Confirmation>(null);
   const { state } = updater;
   const checking = state.phase === "checking";
@@ -39,10 +33,17 @@ export function AppUpdatePanel({
   const updateKnown = Boolean(state.availableVersion);
   const downloaded = state.phase === "downloaded";
   const downloadedLabel = state.progress.totalBytes
-    ? `${formatUpdateSize(state.progress.downloadedBytes)} / ${formatUpdateSize(state.progress.totalBytes)}`
+    ? `${formatUpdateSize(state.progress.downloadedBytes, locale)} / ${formatUpdateSize(state.progress.totalBytes, locale)}`
     : state.progress.downloadedBytes > 0
-      ? formatUpdateSize(state.progress.downloadedBytes)
-      : "Preparing signed package…";
+      ? formatUpdateSize(state.progress.downloadedBytes, locale)
+      : t("updates.preparingPackage");
+  const formatCheckedAt = (value: string | null) =>
+    value
+      ? formatDate(value, {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : t("updates.notChecked");
 
   const confirmDownload = async () => {
     setConfirmation(null);
@@ -61,14 +62,14 @@ export function AppUpdatePanel({
         <span>
           <strong>GrokDesk {state.currentVersion}</strong>
           <small>
-            Updates are verified with GrokDesk&apos;s dedicated updater signature.
+            {t("updates.signatureNotice")}
           </small>
         </span>
         <button
           type="button"
           className="icon-button"
-          aria-label="Check for GrokDesk updates"
-          title="Check for updates"
+          aria-label={t("updates.checkAria")}
+          title={t("updates.check")}
           disabled={preview || checking || downloading || installing}
           onClick={() => void updater.checkForUpdates()}
         >
@@ -80,25 +81,27 @@ export function AppUpdatePanel({
         <div className="app-update__message app-update__message--preview">
           <WarningCircle size={17} />
           <span>
-            <strong>No simulated updates</strong>
-            <small>
-              Browser preview never invents a release, signature, download, or installation result. Open the installed desktop app to check GitHub Releases.
-            </small>
+            <strong>{t("updates.previewTitle")}</strong>
+            <small>{t("updates.previewDescription")}</small>
           </span>
         </div>
       ) : state.phase === "current" ? (
         <div className="app-update__message app-update__message--success">
           <CheckCircle size={17} weight="fill" />
           <span>
-            <strong>You&apos;re up to date</strong>
-            <small>Last checked {formatCheckedAt(state.checkedAt)}.</small>
+            <strong>{t("updates.current")}</strong>
+            <small>
+              {t("updates.lastChecked", {
+                time: formatCheckedAt(state.checkedAt),
+              })}
+            </small>
           </span>
         </div>
       ) : state.phase === "error" ? (
         <div className="app-update__message app-update__message--error">
           <WarningCircle size={17} weight="fill" />
           <span>
-            <strong>Update check needs attention</strong>
+            <strong>{t("updates.errorTitle")}</strong>
             <small>{state.error}</small>
           </span>
         </div>
@@ -108,11 +111,21 @@ export function AppUpdatePanel({
             <div>
               <span className="status-dot status-dot--blue" />
               <span>
-                <strong>GrokDesk {state.availableVersion} is available</strong>
+                <strong>
+                  {t("updates.available", {
+                    version: state.availableVersion ?? "",
+                  })}
+                </strong>
                 <small>
-                  Checked {formatCheckedAt(state.checkedAt)}
+                  {t("updates.checked", {
+                    time: formatCheckedAt(state.checkedAt),
+                  })}
                   {state.publishedAt
-                    ? ` · published ${new Date(state.publishedAt).toLocaleDateString()}`
+                    ? ` · ${t("updates.published", {
+                        date: formatDate(state.publishedAt, {
+                          dateStyle: "medium",
+                        }),
+                      })}`
                     : ""}
                 </small>
               </span>
@@ -123,10 +136,13 @@ export function AppUpdatePanel({
           {downloading ? (
             <div className="app-update__progress" aria-live="polite">
               <div>
-                <span>Downloading signed update</span>
+                <span>{t("updates.downloadingSigned")}</span>
                 <strong>
                   {state.progress.percent !== null
-                    ? `${state.progress.percent}%`
+                    ? formatNumber(state.progress.percent / 100, {
+                        style: "percent",
+                        maximumFractionDigits: 0,
+                      })
                     : downloadedLabel}
                 </strong>
               </div>
@@ -144,9 +160,11 @@ export function AppUpdatePanel({
             <div className="app-update__message app-update__message--success">
               <CheckCircle size={17} weight="fill" />
               <span>
-                <strong>Verified update is ready</strong>
+                <strong>{t("updates.ready")}</strong>
                 <small>
-                  Installation closes GrokDesk and restarts into {state.availableVersion}.
+                  {t("updates.readyDescription", {
+                    version: state.availableVersion ?? "",
+                  })}
                 </small>
               </span>
             </div>
@@ -156,10 +174,10 @@ export function AppUpdatePanel({
         <div className="app-update__message">
           <ArrowClockwise size={17} className={checking ? "spin" : undefined} />
           <span>
-            <strong>{checking ? "Checking GitHub Releases…" : "Automatic update check"}</strong>
-            <small>
-              GrokDesk checks metadata automatically, but never downloads, installs, or restarts without confirmation.
-            </small>
+            <strong>
+              {checking ? t("updates.checkingGithub") : t("updates.automatic")}
+            </strong>
+            <small>{t("updates.automaticDescription")}</small>
           </span>
         </div>
       )}
@@ -169,13 +187,17 @@ export function AppUpdatePanel({
           <span>
             <strong>
               {confirmation === "download"
-                ? `Download GrokDesk ${state.availableVersion}?`
-                : `Install GrokDesk ${state.availableVersion} and restart now?`}
+                ? t("updates.confirmDownloadTitle", {
+                    version: state.availableVersion ?? "",
+                  })
+                : t("updates.confirmInstallTitle", {
+                    version: state.availableVersion ?? "",
+                  })}
             </strong>
             <small>
               {confirmation === "download"
-                ? "The package must pass the updater signature check before it can be installed."
-                : "Save any terminal work first. The application will close during installation."}
+                ? t("updates.confirmDownloadDescription")
+                : t("updates.confirmInstallDescription")}
             </small>
           </span>
           <div>
@@ -184,7 +206,7 @@ export function AppUpdatePanel({
               className="secondary-button"
               onClick={() => setConfirmation(null)}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="button"
@@ -195,7 +217,9 @@ export function AppUpdatePanel({
                   : confirmInstall())
               }
             >
-              {confirmation === "download" ? "Confirm download" : "Install & restart"}
+              {confirmation === "download"
+                ? t("updates.confirmDownload")
+                : t("updates.installRestart")}
             </button>
           </div>
         </div>
@@ -204,8 +228,8 @@ export function AppUpdatePanel({
       <div className="app-update__actions">
         <small>
           {restartBlocked
-            ? "Finish running Grok tasks, permissions, and terminal commands before installing."
-            : "Download and restart always require separate confirmation."}
+            ? t("updates.blockedNotice")
+            : t("updates.confirmationNotice")}
         </small>
         {installing ? (
           <button
@@ -213,7 +237,9 @@ export function AppUpdatePanel({
             className="primary-button"
             disabled
           >
-            {state.phase === "restarting" ? "Restarting…" : "Installing…"}
+            {state.phase === "restarting"
+              ? t("updates.restarting")
+              : t("common.installing")}
           </button>
         ) : downloaded ? (
           <button
@@ -222,7 +248,7 @@ export function AppUpdatePanel({
             disabled={restartBlocked || installing}
             onClick={() => setConfirmation("install")}
           >
-            {installing ? "Installing…" : "Install & restart"}
+            {installing ? t("common.installing") : t("updates.installRestart")}
           </button>
         ) : updateKnown ? (
           <button
@@ -232,7 +258,7 @@ export function AppUpdatePanel({
             onClick={() => setConfirmation("download")}
           >
             <DownloadSimple size={15} />
-            {downloading ? "Downloading…" : "Download update"}
+            {downloading ? t("common.downloading") : t("updates.download")}
           </button>
         ) : (
           <button
@@ -242,7 +268,7 @@ export function AppUpdatePanel({
             onClick={() => void updater.checkForUpdates()}
           >
             <ArrowClockwise size={15} className={checking ? "spin" : undefined} />
-            {checking ? "Checking…" : "Check now"}
+            {checking ? t("common.checking") : t("updates.checkNow")}
           </button>
         )}
       </div>

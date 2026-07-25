@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider";
+import type {
+  TranslationKey,
+  TranslationValues,
+} from "../i18n/types";
 import { normalizeSessionUpdate, planFromUpdate, toolFromUpdate } from "../lib/acp";
 import type { RecordAuditEvent } from "../lib/audit";
 import {
   backgroundTaskCount,
   parseTaskScopedEvent,
+  shouldReuseTaskSession,
   type TaskSessionStatus,
 } from "../lib/backgroundRuntime";
 import {
@@ -56,10 +62,21 @@ interface RuntimeNotice {
   kind: "info" | "success" | "error" | "permission";
 }
 
+type RuntimeNoticeContent =
+  | { message: string }
+  | {
+      key: TranslationKey;
+      values?: TranslationValues;
+    };
+
+interface StoredRuntimeNotice extends Omit<RuntimeNotice, "message"> {
+  content: RuntimeNoticeContent;
+}
+
 const GLOBAL_LOG_KEY = "__grokdesk_global__";
 
-const formatTime = () =>
-  new Intl.DateTimeFormat("en", {
+const formatTime = (locale: string) =>
+  new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -81,21 +98,21 @@ const isAuthenticationError = (cause: unknown) =>
     String(cause),
   );
 
-const runtimeStatusText = (runtime: RuntimeStatus) =>
-  runtime.available
-    ? runtime.authenticationState === "verified"
-      ? "Grok Build · ACP ready"
-      : runtime.authenticationState === "configured"
-        ? "Grok Build · OAuth configured"
-        : "Grok Build · Sign in required"
-    : "Grok Build · Not installed";
-
 export function useGrokRuntime(
   workspacePath: string,
   activeTask: GrokTask | null,
   updateTask: UpdateTask,
   recordAuditEvent: RecordAuditEvent,
 ) {
+  const { formatNumber, locale, t } = useI18n();
+  const runtimeStatusText = (nextRuntime: RuntimeStatus) =>
+    nextRuntime.available
+      ? nextRuntime.authenticationState === "verified"
+        ? t("runtime.status.acpReady")
+        : nextRuntime.authenticationState === "configured"
+          ? t("runtime.status.oauthConfigured")
+          : t("runtime.status.signInRequired")
+      : t("runtime.status.notInstalled");
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [sessionsByTask, setSessionsByTask] = useState<
     Record<string, AcpSessionInfo>
@@ -118,9 +135,11 @@ export function useGrokRuntime(
   const [modelCatalogLoading, setModelCatalogLoading] = useState(false);
   const [modelConfiguring, setModelConfiguring] = useState(false);
   const [subscription, setSubscription] = useState<GrokSubscription | null>(null);
-  const [statusText, setStatusText] = useState("Inspecting Grok Build…");
+  const [statusText, setStatusText] = useState(() =>
+    t("runtime.status.inspecting"),
+  );
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<RuntimeNotice | null>(null);
+  const [notice, setNotice] = useState<StoredRuntimeNotice | null>(null);
   const mounted = useRef(true);
   const activeTaskRef = useRef(activeTask);
   const sessionsRef = useRef(new Map<string, AcpSessionInfo>());
@@ -160,14 +179,14 @@ export function useGrokRuntime(
 
   const showNotice = useCallback(
     (
-      message: string,
+      content: RuntimeNoticeContent,
       options: {
         taskId?: string | null;
         kind?: RuntimeNotice["kind"];
       } = {},
     ) => {
       setNotice({
-        message,
+        content,
         taskId: options.taskId ?? null,
         kind: options.kind ?? "info",
       });
@@ -206,14 +225,14 @@ export function useGrokRuntime(
   const notifyBackgroundTask = useCallback(
     (
       taskId: string,
-      message: string,
+      content: RuntimeNoticeContent,
       kind: RuntimeNotice["kind"],
     ) => {
       if (activeTaskRef.current?.id === taskId) return;
       setAttentionTaskIds((current) =>
         current.includes(taskId) ? current : [...current, taskId],
       );
-      showNotice(message, { taskId, kind });
+      showNotice(content, { taskId, kind });
       void requestTaskAttention().catch(() => undefined);
     },
     [showNotice],
@@ -229,10 +248,10 @@ export function useGrokRuntime(
     } catch (cause) {
       if (!mounted.current) return null;
       setError(String(cause));
-      setStatusText("Grok Build · Detection failed");
+      setStatusText(t("runtime.status.detectionFailed"));
       return null;
     }
-  }, []);
+  }, [t]);
 
   const updateConnectedTask = useCallback(
     (
@@ -326,7 +345,7 @@ export function useGrokRuntime(
                       id: createEntryId("agent"),
                       role: "agent" as const,
                       name: "Grok Build",
-                      time: formatTime(),
+                      time: formatTime(locale),
                       createdAt: new Date().toISOString(),
                       content: messageChunk,
                       streaming: true,
@@ -356,7 +375,13 @@ export function useGrokRuntime(
                 optionId: String(
                   option.optionId ?? option.option_id ?? `option-${index}`,
                 ),
-                name: String(option.name ?? option.label ?? `Option ${index + 1}`),
+                name: String(
+                  option.name ??
+                    option.label ??
+                    t("runtime.permission.option", {
+                      number: formatNumber(index + 1),
+                    }),
+                ),
                 kind: option.kind ? String(option.kind) : undefined,
               }),
             );
@@ -369,12 +394,12 @@ export function useGrokRuntime(
             id: request.id,
             auditEventId,
             title: String(
-              request.params?.title ?? "Grok Build needs permission",
+              request.params?.title ?? t("runtime.permission.title"),
             ),
             description: String(
               request.params?.description ??
                 request.params?.toolCallTitle ??
-                "Review this action before Grok Build continues.",
+                t("runtime.permission.description"),
             ),
             options:
               options.length > 0
@@ -382,12 +407,12 @@ export function useGrokRuntime(
                 : [
                     {
                       optionId: "allow_once",
-                      name: "Allow once",
+                      name: t("runtime.permission.allowOnce"),
                       kind: "allow_once",
                     },
                     {
                       optionId: "reject_once",
-                      name: "Deny",
+                      name: t("permissionDialog.deny"),
                       kind: "reject_once",
                     },
                   ],
@@ -402,12 +427,12 @@ export function useGrokRuntime(
             taskId,
             kind: "permission",
             title: nextPermission.title,
-            detail: "Waiting for your decision",
+            detail: t("runtime.permission.waiting"),
             status: "pending",
           });
           notifyBackgroundTask(
             taskId,
-            "A background Grok task needs your permission.",
+            { key: "runtime.permission.background" },
             "permission",
           );
         },
@@ -433,8 +458,8 @@ export function useGrokRuntime(
         if (activeTaskRef.current?.id === scoped.taskId) {
           setStatusText(
             scoped.payload.state === "connected"
-              ? "Grok Build · ACP connected"
-              : "Grok Build · Session ready to restore",
+              ? t("runtime.status.acpConnected")
+              : t("runtime.status.readyToRestore"),
           );
         }
       }),
@@ -455,10 +480,13 @@ export function useGrokRuntime(
     };
   }, [
     appendTerminalLine,
+    formatNumber,
+    locale,
     notifyBackgroundTask,
     recordAuditEvent,
     refreshRuntime,
     setTaskSession,
+    t,
     updateConnectedTask,
     workspacePath,
   ]);
@@ -471,13 +499,20 @@ export function useGrokRuntime(
     ): Promise<string> => {
       const run = async () => {
         const currentSession = sessionsRef.current.get(task.id);
+        if (
+          currentSession &&
+          shouldReuseTaskSession(true, restart, forceNewSession)
+        ) {
+          // 普通发送和自动恢复都复用已连接会话，避免重复触发恢复状态和后端连接。
+          return currentSession.sessionId;
+        }
 
         setError(null);
         if (activeTaskRef.current?.id === task.id) {
           setStatusText(
             task.acpSessionId
-              ? "Restoring Grok Build session…"
-              : "Starting Grok Build ACP…",
+              ? t("runtime.status.restoringSession")
+              : t("runtime.status.startingAcp"),
           );
         }
 
@@ -488,7 +523,7 @@ export function useGrokRuntime(
           ? task.workspacePath
           : workspacePath;
         if (!isWorkspaceSelected(taskWorkspace)) {
-          throw new Error("Choose a project folder before starting Grok Build.");
+          throw new Error(t("runtime.error.chooseWorkspace"));
         }
 
         try {
@@ -525,13 +560,15 @@ export function useGrokRuntime(
             };
           });
           setRuntime((current) =>
-            current ? { ...current, authenticationState: "verified" } : current,
+            current && current.authenticationState !== "verified"
+              ? { ...current, authenticationState: "verified" }
+              : current,
           );
           if (activeTaskRef.current?.id === task.id) {
             setStatusText(
               resumeSessionId
-                ? "Grok Build · Session restored"
-                : "Grok Build · ACP connected",
+                ? t("runtime.status.sessionRestored")
+                : t("runtime.status.acpConnected"),
             );
           }
           return nextSessionId;
@@ -545,8 +582,8 @@ export function useGrokRuntime(
           if (activeTaskRef.current?.id === task.id) {
             setStatusText(
               isAuthenticationError(cause)
-                ? "Grok Build · Sign in required"
-                : "Grok Build · ACP connection failed",
+                ? t("runtime.status.signInRequired")
+                : t("runtime.status.connectionFailed"),
             );
           }
           setError(String(cause));
@@ -568,16 +605,16 @@ export function useGrokRuntime(
       );
       return operation;
     },
-    [setTaskSession, updateTask, workspacePath],
+    [setTaskSession, t, updateTask, workspacePath],
   );
 
   const connect = useCallback(
     async (restart = false) => {
       const task = activeTaskRef.current;
-      if (!task) throw new Error("Create a task before starting Grok Build ACP.");
+      if (!task) throw new Error(t("runtime.error.createTaskBeforeAcp"));
       return connectTask(task, restart);
     },
-    [connectTask],
+    [connectTask, t],
   );
 
   const refreshRuntimeModels = useCallback(async () => {
@@ -607,8 +644,7 @@ export function useGrokRuntime(
         (candidate) => candidate.modelId === requested.modelId,
       );
       if (!model) {
-        const message =
-          "Refresh the official Runtime model list before saving this model.";
+        const message = t("runtime.error.refreshModels");
         setError(message);
         throw new Error(message);
       }
@@ -618,14 +654,10 @@ export function useGrokRuntime(
           )?.value ?? null)
         : null;
       if (requested.reasoningEffort && !reasoningEffort) {
-        fail(
-          "The selected reasoning effort is not reported for this model.",
-        );
+        fail(t("runtime.error.reasoningUnavailable"));
       }
       if (busy || permission) {
-        fail(
-          "Wait for the current Runtime action to finish before changing models.",
-        );
+        fail(t("runtime.error.waitBeforeModelChange"));
       }
 
       let profile: RuntimeLaunchProfile;
@@ -651,9 +683,11 @@ export function useGrokRuntime(
         !isWorkspaceSelected(workspacePath)
       ) {
         showNotice(
-          task?.messages.length
-            ? "模型设置已保存为新任务默认值；当前已有对话的任务继续使用原 ACP 会话。"
-            : "模型设置已保存为新任务默认值；完成登录并选择工作区后会在新任务中生效。",
+          {
+            key: task?.messages.length
+              ? "runtime.notice.modelDefaultConversation"
+              : "runtime.notice.modelDefaultFuture",
+          },
         );
         return;
       }
@@ -669,11 +703,16 @@ export function useGrokRuntime(
       try {
         await connectTask(nextTask, false, true);
         showNotice(
-          `${model.name} · ${
-            model.reasoningEfforts.find(
-              (effort) => effort.value === reasoningEffort,
-            )?.label ?? "Runtime default effort"
-          } 已应用到当前空任务，并保存为新任务默认值。`,
+          {
+            key: "runtime.notice.modelApplied",
+            values: {
+              model: model.name,
+              effort:
+                model.reasoningEfforts.find(
+                  (effort) => effort.value === reasoningEffort,
+                )?.label ?? t("models.runtimeDefaultEffort"),
+            },
+          },
         );
       } finally {
         setModelConfiguring(false);
@@ -687,27 +726,38 @@ export function useGrokRuntime(
       runtime,
       runtimeModelState,
       showNotice,
+      t,
       updateTask,
       workspacePath,
     ],
   );
 
+  const workspaceReady = isWorkspaceSelected(workspacePath);
+  const authenticationReady =
+    runtime?.available === true &&
+    runtime.authenticationState !== "missing" &&
+    runtime.authenticationState !== "expired";
+
   useEffect(() => {
-    const authenticationReady =
-      runtime?.available === true &&
-      runtime.authenticationState !== "missing" &&
-      runtime.authenticationState !== "expired";
     if (
-      !activeTask?.id ||
-      !isWorkspaceSelected(workspacePath) ||
+      !activeTaskId ||
+      !workspaceReady ||
       !authenticationReady ||
       signingIn ||
-      busy
+      busy ||
+      sessionsRef.current.has(activeTaskId)
     ) return;
 
     const task = activeTaskRef.current;
     if (task) void connectTask(task).catch(() => undefined);
-  }, [activeTask?.id, busy, connectTask, runtime, signingIn]);
+  }, [
+    activeTaskId,
+    authenticationReady,
+    busy,
+    connectTask,
+    signingIn,
+    workspaceReady,
+  ]);
 
   useEffect(() => {
     if (!activeTaskId) return;
@@ -719,25 +769,29 @@ export function useGrokRuntime(
   const runBrowserDemo = useCallback(
     async (taskId: string, prompt: string, attachmentCount: number) => {
       const response = [
-        "### Browser preview\n\n",
-        "Your task and message were saved **locally in this preview**.\n\n",
+        t("runtime.preview.heading"),
+        t("runtime.preview.saved"),
         attachmentCount > 0
-          ? `- **Attachments:** ${attachmentCount} selected for interface testing; no file content was sent or uploaded.\n`
+          ? t("runtime.preview.attachments", {
+              count: formatNumber(attachmentCount),
+            })
           : "",
-        "- **Desktop behavior:** the installed app sends the prompt through the official `Grok Build ACP` session.\n\n",
-        "| Preview check | Result |\n| --- | --- |\n| Local task | Saved |\n| External upload | Not performed |\n\n",
-        "```text\nNo command was executed in browser preview.\n```\n\n",
+        t("runtime.preview.desktopBehavior"),
+        t("runtime.preview.table"),
+        t("runtime.preview.noCommand"),
         prompt
-          ? `> Current preview request: “${prompt.slice(0, 80)}${prompt.length > 80 ? "…" : ""}”`
-          : "> Current preview request contains attachments only.",
+          ? t("runtime.preview.currentRequest", {
+              prompt: `${prompt.slice(0, 80)}${prompt.length > 80 ? "…" : ""}`,
+            })
+          : t("runtime.preview.attachmentsOnly"),
       ];
       const previewTools = [
-        ["Read", "Preview only · no workspace files read"],
-        ["Update", "Preview only · no files changed"],
-        ["Run", "Preview only · no command executed"],
-        ["Test", "Preview only · no test process started"],
-        ["Read", "Preview only · no Git state inspected"],
-        ["Update", "Preview only · interface demonstration"],
+        ["Read", t("runtime.preview.tool.noFilesRead")],
+        ["Update", t("runtime.preview.tool.noFilesChanged")],
+        ["Run", t("runtime.preview.tool.noCommand")],
+        ["Test", t("runtime.preview.tool.noTests")],
+        ["Read", t("runtime.preview.tool.noGit")],
+        ["Update", t("runtime.preview.tool.demo")],
       ].map(
         ([action, target], index): ToolActivity => ({
           id: `preview-tool-${index}`,
@@ -757,7 +811,7 @@ export function useGrokRuntime(
             id: createEntryId("agent"),
             role: "agent",
             name: "Grok Build",
-            time: formatTime(),
+            time: formatTime(locale),
             createdAt: new Date().toISOString(),
             content: "",
             streaming: true,
@@ -779,7 +833,7 @@ export function useGrokRuntime(
         }));
       }
     },
-    [updateTask],
+    [formatNumber, locale, t, updateTask],
   );
 
   const send = useCallback(
@@ -797,7 +851,13 @@ export function useGrokRuntime(
       const attachmentSummaries = attachments.map(({ data: _data, ...summary }) =>
         summary,
       );
-      const titleSource = text || `Review ${attachmentSummaries[0]?.name ?? "attachments"}`;
+      const titleSource =
+        text ||
+        (attachmentSummaries[0]
+          ? t("runtime.preview.reviewAttachment", {
+              name: attachmentSummaries[0].name,
+            })
+          : t("runtime.preview.reviewAttachments"));
 
       const taskId = task.id;
       const taskTitle =
@@ -825,7 +885,7 @@ export function useGrokRuntime(
               id: createEntryId("user"),
               role: "user",
               name: "You",
-              time: formatTime(),
+              time: formatTime(locale),
               createdAt: new Date().toISOString(),
               content: text,
               attachments: attachmentSummaries,
@@ -852,7 +912,7 @@ export function useGrokRuntime(
           await stopAcpSession(taskId).catch(() => undefined);
           setTaskSession(taskId, null);
           if (activeTaskRef.current?.id === taskId) {
-            setStatusText("Grok Build · Ready to retry");
+            setStatusText(t("runtime.status.readyToRetry"));
           }
         }
       } finally {
@@ -872,8 +932,14 @@ export function useGrokRuntime(
           notifyBackgroundTask(
             taskId,
             succeeded
-              ? `“${taskTitle}” finished in the background.`
-              : `“${taskTitle}” needs attention.`,
+              ? {
+                  key: "runtime.notice.backgroundFinished",
+                  values: { title: taskTitle },
+                }
+              : {
+                  key: "runtime.notice.backgroundAttention",
+                  values: { title: taskTitle },
+                },
             succeeded ? "success" : "error",
           );
         }
@@ -882,10 +948,12 @@ export function useGrokRuntime(
     [
       appendTerminalLine,
       connectTask,
+      locale,
       notifyBackgroundTask,
       runBrowserDemo,
       setTaskRunning,
       setTaskSession,
+      t,
       updateTask,
     ],
   );
@@ -897,17 +965,17 @@ export function useGrokRuntime(
       .reverse()
       .find((entry) => entry.role === "user");
     if (!previousMessage) {
-      setError("There is no previous prompt to retry.");
+      setError(t("runtime.error.noPreviousPrompt"));
       return;
     }
     if (previousMessage.attachments && previousMessage.attachments.length > 0) {
       setError(
-        "Attachment contents are not saved in task history. Add the files again before retrying this prompt.",
+        t("runtime.error.retryAttachments"),
       );
       return;
     }
     await send(previousMessage.content);
-  }, [send]);
+  }, [send, t]);
 
   const cancel = useCallback(async () => {
     const taskId = activeTaskRef.current?.id;
@@ -915,23 +983,23 @@ export function useGrokRuntime(
     cancelledTaskIdsRef.current.add(taskId);
     try {
       await cancelAcpTurn(taskId);
-      setStatusText("Grok Build · Turn cancelled");
+      setStatusText(t("runtime.status.turnCancelled"));
     } catch (cause) {
       setError(String(cause));
     }
-  }, []);
+  }, [t]);
 
   const installRuntime = useCallback(async () => {
     if (installing) return;
     setInstalling(true);
     setError(null);
-    setStatusText("Installing official Grok Runtime…");
+    setStatusText(t("runtime.status.installing"));
     if (!isDesktopRuntime()) {
       setTerminalLinesByTask((current) => ({
         ...current,
         [GLOBAL_LOG_KEY]: [
           ...(current[GLOBAL_LOG_KEY] ?? []),
-        "[preview] Simulating the official Grok Runtime installer. No software is changed.",
+        t("runtime.preview.installSimulation"),
         ].slice(-120),
       }));
     }
@@ -943,12 +1011,12 @@ export function useGrokRuntime(
       return next;
     } catch (cause) {
       setError(String(cause));
-      setStatusText("Grok Runtime installation failed");
+      setStatusText(t("runtime.status.installFailed"));
       throw cause;
     } finally {
       setInstalling(false);
     }
-  }, [installing]);
+  }, [installing, t]);
 
   const verifySubscription = useCallback(async () => {
     if (subscriptionLoading) return subscription;
@@ -958,17 +1026,18 @@ export function useGrokRuntime(
     try {
       const task = activeTaskRef.current;
       if (!task) {
-        throw new Error("Create a task before refreshing account information.");
+        throw new Error(t("runtime.error.createTaskBeforeAccount"));
       }
       await connect();
       const next = await fetchGrokSubscription(task.id);
       setSubscription(next);
-      setStatusText("Grok Build · Account refreshed");
+      setStatusText(t("runtime.status.accountRefreshed"));
       showNotice(
         next.availability === "unsupported"
-          ? next.message ||
-              "Sign-in is verified, but the official Grok CLI does not expose subscription or quota data."
-          : "Account, subscription, and quota information refreshed.",
+          ? next.message
+            ? { message: next.message }
+            : { key: "runtime.notice.billingUnsupported" }
+          : { key: "runtime.notice.accountRefreshed" },
       );
       return next;
     } catch (cause) {
@@ -977,13 +1046,12 @@ export function useGrokRuntime(
     } finally {
       setSubscriptionLoading(false);
     }
-  }, [connect, showNotice, subscription, subscriptionLoading]);
+  }, [connect, showNotice, subscription, subscriptionLoading, t]);
 
   const signIn = useCallback(async () => {
     if (signingIn) return;
     if (anyBusy || hasAnyPermission) {
-      const message =
-        "Wait for background tasks and permission requests before starting OAuth.";
+      const message = t("runtime.error.waitBeforeOAuth");
       setError(message);
       throw new Error(message);
     }
@@ -993,13 +1061,13 @@ export function useGrokRuntime(
     accountAutoRefreshStarted.current = false;
     setError(null);
     setNotice(null);
-    setStatusText("Opening official Grok OAuth…");
+    setStatusText(t("runtime.status.openingOAuth"));
 
     try {
       const result = await launchOAuth();
       if (!result.succeeded) {
         throw new Error(
-          result.message || "The official Grok sign-in did not complete.",
+          result.message || t("runtime.error.signInIncomplete"),
         );
       }
 
@@ -1009,18 +1077,16 @@ export function useGrokRuntime(
         nextRuntime.authenticationState === "expired"
       ) {
         throw new Error(
-          "Browser authorization finished, but the official Grok CLI has not saved valid credentials.",
+          t("runtime.error.credentialsNotSaved"),
         );
       }
       setRuntime(nextRuntime);
-      setStatusText("Grok sign-in succeeded. Refreshing account information…");
-      showNotice("Grok sign-in succeeded. Refreshing account information…");
+      setStatusText(t("runtime.status.refreshingAccount"));
+      showNotice({ key: "runtime.status.refreshingAccount" });
 
       if (!isWorkspaceSelected(workspacePath) || !activeTaskRef.current) {
-        setStatusText("Grok Build · Signed in · Choose a workspace");
-        showNotice(
-          "Grok sign-in succeeded. Choose a project folder to start ACP and refresh account information.",
-        );
+        setStatusText(t("runtime.status.chooseWorkspaceAfterSignIn"));
+        showNotice({ key: "runtime.notice.chooseWorkspaceAfterSignIn" });
         return;
       }
 
@@ -1031,38 +1097,39 @@ export function useGrokRuntime(
         setSessionsByTask({});
         const task = activeTaskRef.current;
         if (!task) {
-          throw new Error("Create a task before verifying the refreshed account.");
+          throw new Error(t("runtime.error.createTaskBeforeVerify"));
         }
         await connect(true);
         setSubscriptionLoading(true);
         const nextSubscription = await fetchGrokSubscription(task.id);
         setSubscription(nextSubscription);
-        setStatusText("Grok Build · Signed in and verified");
+        setStatusText(t("runtime.status.signedInVerified"));
         showNotice(
           nextSubscription.availability === "unsupported"
-            ? nextSubscription.message ||
-                "Sign-in is verified, but the official Grok CLI does not expose subscription or quota data."
-            : "Grok sign-in succeeded and account information was refreshed.",
+            ? nextSubscription.message
+              ? { message: nextSubscription.message }
+              : { key: "runtime.notice.billingUnsupported" }
+            : { key: "runtime.notice.signInRefreshed" },
         );
         if (!isDesktopRuntime()) {
           appendTerminalLine(
             GLOBAL_LOG_KEY,
-            "[preview] OAuth completion was simulated. No account was accessed or changed.",
+            t("runtime.preview.oauthSimulation"),
           );
         }
       } catch (refreshCause) {
-        setStatusText("Grok Build · OAuth configured");
+        setStatusText(t("runtime.status.oauthConfigured"));
         setError(
-          `Grok sign-in succeeded, but account refresh failed: ${String(refreshCause)}`,
+          t("runtime.error.accountRefreshFailed", {
+            error: String(refreshCause),
+          }),
         );
-        showNotice(
-          "Grok sign-in succeeded. You can retry account refresh from Settings.",
-        );
+        showNotice({ key: "runtime.notice.retryAccountRefresh" });
       }
     } catch (cause) {
       setNotice(null);
       setError(String(cause));
-      setStatusText("Grok Build · Sign in failed");
+      setStatusText(t("runtime.status.signInFailed"));
       throw cause;
     } finally {
       setSubscriptionLoading(false);
@@ -1075,6 +1142,7 @@ export function useGrokRuntime(
     hasAnyPermission,
     showNotice,
     signingIn,
+    t,
     workspacePath,
   ]);
 
@@ -1129,7 +1197,7 @@ export function useGrokRuntime(
           taskId: permission.taskId,
           kind: "permission",
           title: permission.title,
-          detail: option?.name ?? "Dismissed without selecting an option",
+          detail: option?.name ?? t("runtime.permission.dismissed"),
           status: option ? (rejected ? "denied" : "allowed") : "cancelled",
         });
         setPermissionsByTask((current) => {
@@ -1148,27 +1216,27 @@ export function useGrokRuntime(
           taskId: permission.taskId,
           kind: "permission",
           title: permission.title,
-          detail: "The decision could not be delivered to the Runtime",
+          detail: t("runtime.permission.deliveryFailed"),
           status: "failed",
         });
         setError(String(cause));
         throw cause;
       }
     },
-    [permission, recordAuditEvent, workspacePath],
+    [permission, recordAuditEvent, t, workspacePath],
   );
 
   const disconnectTask = useCallback(async (taskId: string) => {
     if (runningTaskIdsRef.current.has(taskId)) {
       throw new Error(
-        "Wait for this Grok task to finish or cancel it before disconnecting.",
+        t("runtime.error.waitBeforeDisconnect"),
       );
     }
     const stop = async () => {
       await stopAcpSession(taskId);
       setTaskSession(taskId, null);
       if (activeTaskRef.current?.id === taskId) {
-        setStatusText("Grok Build · OAuth verified");
+        setStatusText(t("runtime.status.oauthVerified"));
       }
     };
     const queue =
@@ -1189,12 +1257,12 @@ export function useGrokRuntime(
         connectionQueuesRef.current.delete(taskId);
       }
     }
-  }, [setTaskSession]);
+  }, [setTaskSession, t]);
 
   const disconnectAll = useCallback(async () => {
     if (runningTaskIdsRef.current.size > 0) {
       throw new Error(
-        "Wait for all Grok tasks to finish or cancel them before switching workspaces.",
+        t("runtime.error.waitBeforeWorkspaceSwitch"),
       );
     }
     try {
@@ -1205,12 +1273,12 @@ export function useGrokRuntime(
       ignoredSessionTaskIdsRef.current.clear();
       setSessionsByTask({});
       setPermissionsByTask({});
-      setStatusText("Grok Build · OAuth verified");
+      setStatusText(t("runtime.status.oauthVerified"));
     } catch (cause) {
       setError(String(cause));
       throw cause;
     }
-  }, []);
+  }, [t]);
 
   const disconnect = useCallback(async () => {
     const taskId = activeTaskRef.current?.id;
@@ -1227,6 +1295,17 @@ export function useGrokRuntime(
       return next;
     });
   }, []);
+
+  const resolvedNotice: RuntimeNotice | null = notice
+    ? {
+        message:
+          "message" in notice.content
+            ? notice.content.message
+            : t(notice.content.key, notice.content.values),
+        taskId: notice.taskId,
+        kind: notice.kind,
+      }
+    : null;
 
   return {
     runtime,
@@ -1255,7 +1334,7 @@ export function useGrokRuntime(
     subscription,
     statusText,
     error,
-    notice,
+    notice: resolvedNotice,
     dismissNotice: () => setNotice(null),
     connect,
     disconnect,

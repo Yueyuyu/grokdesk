@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cancelWorkspaceCommand,
+  fetchGrokSubscription,
   inspectRuntimeModels,
   runDiagnostics,
   runWorkspaceCommand,
@@ -40,5 +41,53 @@ describe("runtime model browser boundary", () => {
     await expect(inspectRuntimeModels()).rejects.toThrow(
       "Runtime model inspection is available only",
     );
+  });
+});
+
+describe("subscription browser boundary", () => {
+  it("leaves preview notices to the localized UI instead of returning fixed English", async () => {
+    const localStorageDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage",
+    );
+    const windowDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "window",
+    );
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) =>
+          key === "grokdesk.preview.oauth-complete" ? "true" : null,
+      },
+    });
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { setTimeout },
+    });
+
+    try {
+      await expect(fetchGrokSubscription("preview-task")).resolves.toMatchObject(
+        {
+          availability: "unsupported",
+          message: null,
+        },
+      );
+    } finally {
+      if (localStorageDescriptor) {
+        Object.defineProperty(
+          globalThis,
+          "localStorage",
+          localStorageDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(globalThis, "localStorage");
+      }
+      if (windowDescriptor) {
+        Object.defineProperty(globalThis, "window", windowDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "window");
+      }
+    }
   });
 });

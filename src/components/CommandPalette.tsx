@@ -24,8 +24,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 import { searchTasks, type TaskSearchResult } from "../lib/taskSearch";
-import { formatTaskTime } from "../lib/tasks";
+import { formatTaskTime, localizeTaskTitle } from "../lib/tasks";
 import type { GrokTask, InspectorTab, NavigationKey } from "../types";
 
 interface CommandPaletteProps {
@@ -86,6 +87,7 @@ export function CommandPalette({
   onOpenInspector,
   onToggleInspector,
 }: CommandPaletteProps) {
+  const { locale, t } = useI18n();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -95,8 +97,8 @@ export function CommandPalette({
     () => [
       {
         id: "new-task",
-        label: "New task",
-        detail: "Start a fresh local task in this workspace",
+        label: t("palette.newTask"),
+        detail: t("palette.newTaskDescription"),
         keywords: "create conversation thread",
         icon: <Plus size={17} />,
         featured: true,
@@ -105,8 +107,8 @@ export function CommandPalette({
       },
       {
         id: "choose-workspace",
-        label: "Choose workspace",
-        detail: "Open a different project folder",
+        label: t("common.chooseWorkspace"),
+        detail: t("palette.chooseWorkspaceDescription"),
         keywords: "folder project switch",
         icon: <FolderOpen size={17} />,
         featured: true,
@@ -114,16 +116,16 @@ export function CommandPalette({
       },
       {
         id: "navigate-tasks",
-        label: "Show tasks",
-        detail: "Return to the active task timeline",
+        label: t("palette.showTasks"),
+        detail: t("palette.showTasksDescription"),
         keywords: "conversation history",
         icon: <FileText size={17} />,
         run: () => onNavigate("tasks"),
       },
       {
         id: "navigate-permissions",
-        label: "Open Permissions & activity",
-        detail: "Review local decisions, tools, and command outcomes",
+        label: t("palette.openPermissions"),
+        detail: t("palette.openPermissionsDescription"),
         keywords: "audit security approval history execution",
         icon: <ShieldCheck size={17} />,
         featured: true,
@@ -131,8 +133,8 @@ export function CommandPalette({
       },
       {
         id: "navigate-diagnostics",
-        label: "Open Diagnostics",
-        detail: "Check Runtime, OAuth, ACP, workspace, Git, and MCP",
+        label: t("palette.openDiagnostics"),
+        detail: t("palette.openDiagnosticsDescription"),
         keywords: "health doctor troubleshoot report support",
         icon: <Pulse size={17} />,
         featured: true,
@@ -140,24 +142,24 @@ export function CommandPalette({
       },
       {
         id: "navigate-plugins",
-        label: "Open Plugins",
-        detail: "Manage extensions exposed by the official Runtime",
+        label: t("palette.openPlugins"),
+        detail: t("palette.openPluginsDescription"),
         keywords: "marketplace extension",
         icon: <PuzzlePiece size={17} />,
         run: () => onNavigate("plugins"),
       },
       {
         id: "navigate-mcp",
-        label: "Open MCP",
-        detail: "Inspect Runtime-provided MCP servers",
+        label: t("palette.openMcp"),
+        detail: t("palette.openMcpDescription"),
         keywords: "server tools integration",
         icon: <ShareNetwork size={17} />,
         run: () => onNavigate("mcp"),
       },
       {
         id: "navigate-account",
-        label: "Open Account",
-        detail: "Official login, subscription, and local GrokDesk activity",
+        label: t("palette.openAccount"),
+        detail: t("palette.openAccountDescription"),
         keywords: "profile oauth quota usage heatmap",
         icon: <UserCircle size={17} />,
         featured: true,
@@ -165,8 +167,8 @@ export function CommandPalette({
       },
       {
         id: "navigate-settings",
-        label: "Open Settings",
-        detail: "Runtime, model, workspace, and appearance",
+        label: t("common.openSettings"),
+        detail: t("palette.openSettingsDescription"),
         keywords: "preferences theme model runtime",
         icon: <GearSix size={17} />,
         featured: true,
@@ -174,8 +176,8 @@ export function CommandPalette({
       },
       {
         id: "inspector-changes",
-        label: "Open Changes inspector",
-        detail: "Review Git changes from the selected workspace",
+        label: t("palette.openChanges"),
+        detail: t("palette.openChangesDescription"),
         keywords: "diff git files review",
         icon: <ListMagnifyingGlass size={17} />,
         featured: true,
@@ -184,8 +186,8 @@ export function CommandPalette({
       },
       {
         id: "inspector-terminal",
-        label: "Open Terminal inspector",
-        detail: "Show workspace commands and ACP logs",
+        label: t("palette.openTerminal"),
+        detail: t("palette.openTerminalDescription"),
         keywords: "shell powershell logs",
         icon: <TerminalWindow size={17} />,
         featured: true,
@@ -194,8 +196,8 @@ export function CommandPalette({
       },
       {
         id: "inspector-tests",
-        label: "Open Tests inspector",
-        detail: "Review structured results from real terminal output",
+        label: t("palette.openTests"),
+        detail: t("palette.openTestsDescription"),
         keywords: "vitest cargo jest node results failures",
         icon: <Flask size={17} />,
         featured: true,
@@ -204,8 +206,8 @@ export function CommandPalette({
       },
       {
         id: "inspector-context",
-        label: "Open Context inspector",
-        detail: "Inspect the active local task context",
+        label: t("palette.openContext"),
+        detail: t("palette.openContextDescription"),
         keywords: "session workspace context",
         icon: <SidebarSimple size={17} />,
         disabled: !workspaceReady,
@@ -213,10 +215,12 @@ export function CommandPalette({
       },
       {
         id: "toggle-inspector",
-        label: inspectorCollapsed ? "Show inspector" : "Collapse inspector",
+        label: inspectorCollapsed
+          ? t("palette.showInspector")
+          : t("inspector.collapse"),
         detail: inspectorCollapsed
-          ? "Restore the right-hand workspace inspector"
-          : "Give the task timeline more room",
+          ? t("palette.showInspectorDescription")
+          : t("palette.collapseInspectorDescription"),
         keywords: "right panel sidebar hide reveal",
         icon: <SidebarSimple size={17} />,
         run: onToggleInspector,
@@ -230,8 +234,29 @@ export function CommandPalette({
       onOpenInspector,
       onToggleInspector,
       taskSwitchDisabled,
+      t,
       workspaceReady,
     ],
+  );
+
+  const taskSearchMessages = useMemo(
+    () => ({
+      archived: t("common.archived"),
+      archivedTask: t("palette.archivedTask"),
+      attachment: t("palette.attachment"),
+      grokResponse: t("palette.grokResponse"),
+      noPreview: t("palette.noPreview"),
+      noTranscript: t("palette.noTranscript"),
+      newTaskTitle: t("sidebar.newTask"),
+      plan: t("task.plan"),
+      planDetail: t("palette.planDetail"),
+      recentTask: t("palette.recentTask"),
+      taskTitle: t("palette.taskTitle"),
+      tool: t("palette.tool"),
+      toolTarget: t("palette.toolTarget"),
+      yourMessage: t("palette.yourMessage"),
+    }),
+    [t],
   );
 
   const commandEntries = useMemo(
@@ -261,6 +286,7 @@ export function CommandPalette({
             tasks,
             deferredQuery,
             deferredQuery.trim() ? 16 : 6,
+            taskSearchMessages,
           )
         : []
       ).map(
@@ -271,7 +297,7 @@ export function CommandPalette({
           disabled: taskSwitchDisabled,
         }),
       ),
-    [deferredQuery, open, taskSwitchDisabled, tasks],
+    [deferredQuery, open, taskSearchMessages, taskSwitchDisabled, tasks],
   );
   const entries = useMemo(
     () => [...commandEntries, ...taskEntries],
@@ -347,7 +373,9 @@ export function CommandPalette({
             <small>{entry.command.detail}</small>
           </span>
           {entry.command.id === `navigate-${activeNavigation}` ? (
-            <span className="command-palette__badge">Current</span>
+            <span className="command-palette__badge">
+              {t("common.current")}
+            </span>
           ) : null}
         </button>
       );
@@ -370,7 +398,9 @@ export function CommandPalette({
           {task.archivedAt ? <Archive size={17} /> : <FileText size={17} />}
         </span>
         <span className="command-palette__copy">
-          <strong>{task.title}</strong>
+          <strong>
+            {localizeTaskTitle(task.title, t("sidebar.newTask"))}
+          </strong>
           <small>
             <span>{entry.result.label}</span>
             <span aria-hidden="true">·</span>
@@ -378,9 +408,17 @@ export function CommandPalette({
           </small>
         </span>
         <span className="command-palette__meta">
-          {task.id === activeTaskId ? <span className="command-palette__badge">Open</span> : null}
-          {task.archivedAt ? <span className="command-palette__badge">Archived</span> : null}
-          <time>{formatTaskTime(task.archivedAt || task.updatedAt)}</time>
+          {task.id === activeTaskId ? (
+            <span className="command-palette__badge">{t("common.open")}</span>
+          ) : null}
+          {task.archivedAt ? (
+            <span className="command-palette__badge">
+              {t("common.archived")}
+            </span>
+          ) : null}
+          <time>
+            {formatTaskTime(task.archivedAt || task.updatedAt, locale)}
+          </time>
         </span>
       </button>
     );
@@ -407,7 +445,7 @@ export function CommandPalette({
         }}
       >
         <h2 id="command-palette-title" className="sr-only">
-          Search tasks or run a command
+          {t("titlebar.searchAria")}
         </h2>
         <label className="command-palette__search">
           <MagnifyingGlass size={19} />
@@ -415,8 +453,8 @@ export function CommandPalette({
             ref={inputRef}
             type="search"
             value={query}
-            placeholder="Search tasks or run a command…"
-            aria-label="Search tasks or run a command"
+            placeholder={t("palette.searchPlaceholder")}
+            aria-label={t("titlebar.searchAria")}
             aria-controls="command-palette-results"
             aria-activedescendant={
               entries[activeIndex]
@@ -441,7 +479,11 @@ export function CommandPalette({
             }}
           />
           {query ? (
-            <button type="button" onClick={() => setQuery("")} aria-label="Clear search">
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label={t("palette.clearSearch")}
+            >
               <X size={13} />
             </button>
           ) : (
@@ -453,17 +495,31 @@ export function CommandPalette({
           id="command-palette-results"
           className="command-palette__results"
           role="listbox"
-          aria-label="Command and task results"
+          aria-label={t("palette.results")}
         >
           {commandEntries.length > 0 ? (
-            <div className="command-palette__group" role="group" aria-label="Commands">
-              <h3>{query ? "Commands" : "Quick actions"}</h3>
+            <div
+              className="command-palette__group"
+              role="group"
+              aria-label={t("palette.commands")}
+            >
+              <h3>
+                {query ? t("palette.commands") : t("palette.quickActions")}
+              </h3>
               {commandEntries.map((entry, index) => renderEntry(entry, index))}
             </div>
           ) : null}
           {taskEntries.length > 0 ? (
-            <div className="command-palette__group" role="group" aria-label="Tasks">
-              <h3>{query ? "Tasks in this workspace" : "Recent tasks"}</h3>
+            <div
+              className="command-palette__group"
+              role="group"
+              aria-label={t("nav.tasks")}
+            >
+              <h3>
+                {query
+                  ? t("palette.workspaceTasks")
+                  : t("sidebar.recentTasks")}
+              </h3>
               {taskEntries.map((entry, index) =>
                 renderEntry(entry, commandEntries.length + index),
               )}
@@ -472,17 +528,17 @@ export function CommandPalette({
           {entries.length === 0 ? (
             <div className="command-palette__empty">
               <MagnifyingGlass size={20} />
-              <strong>No matching command or local task</strong>
-              <span>Search covers saved tasks in the current workspace, including archives.</span>
+              <strong>{t("palette.emptyTitle")}</strong>
+              <span>{t("palette.emptyDescription")}</span>
             </div>
           ) : null}
         </div>
 
         <footer className="command-palette__footer">
-          <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
-          <span><kbd>Enter</kbd> Open</span>
-          <span><kbd>Esc</kbd> Close</span>
-          <strong>Local workspace only</strong>
+          <span><kbd>↑</kbd><kbd>↓</kbd> {t("palette.navigate")}</span>
+          <span><kbd>Enter</kbd> {t("common.open")}</span>
+          <span><kbd>Esc</kbd> {t("common.close")}</span>
+          <strong>{t("palette.localWorkspaceOnly")}</strong>
         </footer>
       </section>
     </div>

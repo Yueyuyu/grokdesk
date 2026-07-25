@@ -37,3 +37,11 @@ export function backgroundTaskCount(
     0,
   );
 }
+
+export function shouldReuseTaskSession(
+  connected: boolean,
+  restart: boolean,
+  forceNewSession: boolean,
+) {
+  return connected && !restart && !forceNewSession;
+}

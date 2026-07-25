@@ -570,6 +570,11 @@
     grid-column: 1 / -1;
   }
 
+  .locale-control label {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
   .model-settings__form {
     grid-template-columns: 1fr;
   }
@@ -631,6 +636,21 @@
   .runtime-summary__actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .task-storage-summary dl {
+    grid-template-columns: 1fr;
+  }
+
+  .task-storage-summary dl > div,
+  .task-storage-summary dl > div:nth-child(odd),
+  .task-storage-summary dl > div:nth-last-child(-n + 2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .task-storage-summary dl > div:last-child {
+    border-bottom: 0;
   }
 
   .app-update__confirmation,

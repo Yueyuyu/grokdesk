@@ -95,16 +95,47 @@ export function attachmentKind(file: AttachmentFileLike): PromptAttachmentKind {
   return "binary";
 }
 
-export function formatAttachmentSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+export function formatAttachmentSize(bytes: number, locale = "en") {
+  if (bytes < 1024) {
+    return `${new Intl.NumberFormat(locale).format(bytes)} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${new Intl.NumberFormat(locale, {
+      maximumFractionDigits: bytes < 10 * 1024 ? 1 : 0,
+      minimumFractionDigits: bytes < 10 * 1024 ? 1 : 0,
+    }).format(bytes / 1024)} KB`;
+  }
+  return `${new Intl.NumberFormat(locale, {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  }).format(bytes / (1024 * 1024))} MB`;
 }
+
+export interface AttachmentValidationMessages {
+  tooMany: (maximum: number) => string;
+  tooLarge: (name: string, size: string, maximum: string) => string;
+  totalTooLarge: (maximum: string) => string;
+  invalid: string;
+}
+
+const defaultValidationMessages: AttachmentValidationMessages = {
+  tooMany: (maximum) => `You can attach up to ${maximum} files.`,
+  tooLarge: (name, size, maximum) =>
+    `${name} is ${size}; each file must be ${maximum} or smaller.`,
+  totalTooLarge: (maximum) => `Attachments can total up to ${maximum}.`,
+  invalid: "One or more attachments are invalid.",
+};
 
 export function validateAttachmentSelection<T extends AttachmentFileLike>(
   existing: T[],
   incoming: T[],
+  options: {
+    locale?: string;
+    messages?: AttachmentValidationMessages;
+  } = {},
 ) {
+  const locale = options.locale ?? "en";
+  const messages = options.messages ?? defaultValidationMessages;
   const accepted: T[] = [];
   const errors: string[] = [];
   let totalSize = existing.reduce((total, file) => total + file.size, 0);
@@ -116,18 +147,24 @@ export function validateAttachmentSelection<T extends AttachmentFileLike>(
     const fingerprint = `${file.name}\u0000${file.size}\u0000${file.type}`;
     if (fingerprints.has(fingerprint)) continue;
     if (existing.length + accepted.length >= MAX_ATTACHMENTS) {
-      errors.push(`You can attach up to ${MAX_ATTACHMENTS} files.`);
+      errors.push(messages.tooMany(MAX_ATTACHMENTS));
       break;
     }
     if (file.size > MAX_ATTACHMENT_BYTES) {
       errors.push(
-        `${file.name} is ${formatAttachmentSize(file.size)}; each file must be ${formatAttachmentSize(MAX_ATTACHMENT_BYTES)} or smaller.`,
+        messages.tooLarge(
+          file.name,
+          formatAttachmentSize(file.size, locale),
+          formatAttachmentSize(MAX_ATTACHMENT_BYTES, locale),
+        ),
       );
       continue;
     }
     if (totalSize + file.size > MAX_TOTAL_ATTACHMENT_BYTES) {
       errors.push(
-        `Attachments can total up to ${formatAttachmentSize(MAX_TOTAL_ATTACHMENT_BYTES)}.`,
+        messages.totalTooLarge(
+          formatAttachmentSize(MAX_TOTAL_ATTACHMENT_BYTES, locale),
+        ),
       );
       continue;
     }
@@ -163,10 +200,18 @@ async function fileToBase64(file: File) {
 
 export async function preparePromptAttachments(
   files: File[],
+  options?: {
+    locale?: string;
+    messages?: AttachmentValidationMessages;
+  },
 ): Promise<PromptAttachment[]> {
-  const validation = validateAttachmentSelection([], files);
+  const validation = validateAttachmentSelection([], files, options);
   if (validation.accepted.length !== files.length || validation.errors.length > 0) {
-    throw new Error(validation.errors[0] ?? "One or more attachments are invalid.");
+    throw new Error(
+      validation.errors[0] ??
+        options?.messages?.invalid ??
+        defaultValidationMessages.invalid,
+    );
   }
 
   return Promise.all(

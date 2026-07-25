@@ -16,6 +16,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 import {
   installGrokPlugin,
   listGrokPlugins,
@@ -27,7 +28,6 @@ import {
 import {
   filterPlugins,
   isInstalledPlugin,
-  pluginComponentLabels,
   type PluginCatalogView,
 } from "../lib/extensions";
 import { detectAppPlatform, localPathExample } from "../lib/platform";
@@ -57,6 +57,7 @@ export function PluginPanel({
   connected,
   onOpenSettings,
 }: PluginPanelProps) {
+  const { formatNumber, t } = useI18n();
   const localPluginExample = localPathExample(
     detectAppPlatform(),
     "plugin",
@@ -110,12 +111,12 @@ export function PluginPanel({
     async (message: string) => {
       setNotice(
         connected
-          ? `${message} 重新连接 ACP 后，新配置会进入 Grok 会话。`
+          ? `${message} ${t("extensions.reconnectNotice")}`
           : message,
       );
       await refresh();
     },
-    [connected, refresh],
+    [connected, refresh, t],
   );
 
   const runPluginAction = useCallback(
@@ -172,8 +173,8 @@ export function PluginPanel({
       <header className="feature-panel__header extension-panel__header">
         <span className="feature-panel__icon"><PuzzlePiece size={22} /></span>
         <div>
-          <h1>Plugins</h1>
-          <p>读取并管理官方 Grok Runtime 的插件与市场目录。</p>
+          <h1>{t("nav.plugins")}</h1>
+          <p>{t("plugins.description")}</p>
         </div>
         <div className="extension-header-actions">
           <button
@@ -187,7 +188,7 @@ export function PluginPanel({
             }
           >
             <Storefront size={16} />
-            同步市场
+            {t("plugins.syncMarketplace")}
           </button>
           <button
             type="button"
@@ -196,30 +197,38 @@ export function PluginPanel({
             onClick={() => setInstallOpen(true)}
           >
             <DownloadSimple size={16} />
-            安装插件
+            {t("plugins.install")}
           </button>
         </div>
       </header>
 
       {preview ? (
         <div className="extension-banner">
-          浏览器预览不读取或伪造本机插件。安装版会通过官方 <code>grok plugin</code> 命令显示真实结果。
+          {t("plugins.preview.before")} <code>grok plugin</code>{" "}
+          {t("plugins.preview.after")}
         </div>
       ) : null}
 
       {unavailable ? (
         <section className="feature-empty-state">
           <span><PuzzlePiece size={24} /></span>
-          <h2>需要 Grok Runtime</h2>
-          <p>安装官方 Runtime 后，才能发现、启用和更新真实插件。</p>
+          <h2>{t("extensions.runtimeRequired")}</h2>
+          <p>{t("plugins.runtimeRequiredDescription")}</p>
           <button type="button" className="primary-button" onClick={onOpenSettings}>
-            打开设置
+            {t("common.openSettings")}
           </button>
         </section>
       ) : (
         <>
-          <section className="extension-toolbar" aria-label="Plugin catalog controls">
-            <div className="extension-tabs" role="tablist" aria-label="Plugin views">
+          <section
+            className="extension-toolbar"
+            aria-label={t("plugins.catalogControls")}
+          >
+            <div
+              className="extension-tabs"
+              role="tablist"
+              aria-label={t("plugins.views")}
+            >
               <button
                 type="button"
                 role="tab"
@@ -227,7 +236,8 @@ export function PluginPanel({
                 className={view === "installed" ? "is-active" : ""}
                 onClick={() => setView("installed")}
               >
-                已安装 <span>{installedCount}</span>
+                {t("plugins.installed")}{" "}
+                <span>{formatNumber(installedCount)}</span>
               </button>
               <button
                 type="button"
@@ -236,7 +246,8 @@ export function PluginPanel({
                 className={view === "marketplace" ? "is-active" : ""}
                 onClick={() => setView("marketplace")}
               >
-                市场 <span>{marketplaceCount}</span>
+                {t("plugins.marketplace")}{" "}
+                <span>{formatNumber(marketplaceCount)}</span>
               </button>
             </div>
             <label className="extension-search">
@@ -245,11 +256,15 @@ export function PluginPanel({
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索插件"
-                aria-label="Search plugins"
+                placeholder={t("plugins.search")}
+                aria-label={t("plugins.search")}
               />
               {query ? (
-                <button type="button" onClick={() => setQuery("")} aria-label="Clear plugin search">
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label={t("plugins.clearSearch")}
+                >
                   <X size={13} />
                 </button>
               ) : null}
@@ -259,7 +274,7 @@ export function PluginPanel({
               className="icon-button"
               onClick={() => void refresh()}
               disabled={loading || Boolean(action)}
-              aria-label="Refresh plugins"
+              aria-label={t("plugins.refresh")}
             >
               <ArrowClockwise size={17} className={loading ? "spin" : ""} />
             </button>
@@ -272,30 +287,62 @@ export function PluginPanel({
           {loading && catalog.plugins.length === 0 ? (
             <section className="feature-empty-state">
               <span><SpinnerGap size={24} className="spin" /></span>
-              <h2>正在读取 Grok 插件</h2>
-              <p>数据直接来自本机官方 Runtime。</p>
+              <h2>{t("plugins.loading")}</h2>
+              <p>{t("extensions.runtimeSource")}</p>
             </section>
           ) : visiblePlugins.length === 0 ? (
             <section className="feature-empty-state feature-empty-state--compact">
               <span>{view === "installed" ? <PuzzlePiece size={24} /> : <Storefront size={24} />}</span>
-              <h2>{query ? "没有匹配的插件" : view === "installed" ? "尚未安装插件" : "市场目录暂不可用"}</h2>
+              <h2>
+                {query
+                  ? t("plugins.noMatch")
+                  : view === "installed"
+                    ? t("plugins.noneInstalled")
+                    : t("plugins.marketplaceUnavailable")}
+              </h2>
               <p>
                 {query
-                  ? "换一个名称或清除搜索条件。"
+                  ? t("plugins.noMatchDescription")
                   : view === "installed"
-                    ? "从 Git URL、GitHub shorthand 或本地目录安装可信插件。"
-                    : "同步市场后会显示官方 Grok CLI 返回的可用插件。"}
+                    ? t("plugins.noneInstalledDescription")
+                    : t("plugins.marketplaceUnavailableDescription")}
               </p>
               {!query && view === "installed" && !readOnly ? (
                 <button type="button" className="primary-button" onClick={() => setInstallOpen(true)}>
-                  安装第一个插件
+                  {t("plugins.installFirst")}
                 </button>
               ) : null}
             </section>
           ) : (
             <section className="extension-list" aria-live="polite">
               {visiblePlugins.map((plugin) => {
-                const componentLabels = pluginComponentLabels(plugin);
+                const componentLabels = [
+                  plugin.skillCount > 0
+                    ? t("plugins.component.skills", {
+                        count: formatNumber(plugin.skillCount),
+                      })
+                    : null,
+                  plugin.commandCount > 0
+                    ? t("plugins.component.commands", {
+                        count: formatNumber(plugin.commandCount),
+                      })
+                    : null,
+                  plugin.agentCount > 0
+                    ? t("plugins.component.agents", {
+                        count: formatNumber(plugin.agentCount),
+                      })
+                    : null,
+                  plugin.hookCount > 0
+                    ? t("plugins.component.hooks", {
+                        count: formatNumber(plugin.hookCount),
+                      })
+                    : null,
+                  plugin.mcpServerCount > 0
+                    ? t("plugins.component.mcp", {
+                        count: formatNumber(plugin.mcpServerCount),
+                      })
+                    : null,
+                ].filter((label): label is string => Boolean(label));
                 const pending = action?.endsWith(`:${plugin.name}`) === true;
                 return (
                   <article className="extension-card" key={`${plugin.status}:${plugin.name}`}>
@@ -305,11 +352,15 @@ export function PluginPanel({
                         <h2>{plugin.name}</h2>
                         <span className={`extension-status ${plugin.enabled ? "is-enabled" : ""}`}>
                           {isInstalledPlugin(plugin)
-                            ? plugin.enabled ? "已启用" : "已停用"
-                            : plugin.marketplace || "可安装"}
+                            ? plugin.enabled
+                              ? t("common.enabled")
+                              : t("common.disabled")
+                            : plugin.marketplace || t("plugins.available")}
                         </span>
                       </div>
-                      <p>{plugin.description || "官方 Grok Runtime 未提供插件说明。"}</p>
+                      <p>
+                        {plugin.description || t("plugins.noDescription")}
+                      </p>
                       <div className="extension-meta">
                         {plugin.version ? <span>v{plugin.version}</span> : null}
                         {plugin.scope ? <span>{plugin.scope}</span> : null}
@@ -329,7 +380,9 @@ export function PluginPanel({
                           }
                         >
                           {pending ? <SpinnerGap size={14} className="spin" /> : null}
-                          {plugin.enabled ? "停用" : "启用"}
+                          {plugin.enabled
+                            ? t("plugins.disable")
+                            : t("plugins.enable")}
                         </button>
                         <button
                           type="button"
@@ -341,7 +394,7 @@ export function PluginPanel({
                             )
                           }
                         >
-                          更新
+                          {t("common.update")}
                         </button>
                         <button
                           type="button"
@@ -351,7 +404,9 @@ export function PluginPanel({
                             setKeepPluginData(true);
                             setUninstallTarget(plugin);
                           }}
-                          aria-label={`Uninstall ${plugin.name}`}
+                          aria-label={t("plugins.uninstallAria", {
+                            name: plugin.name,
+                          })}
                         >
                           <Trash size={16} />
                         </button>
@@ -371,20 +426,27 @@ export function PluginPanel({
             <header>
               <span><DownloadSimple size={19} /></span>
               <div>
-                <h2>安装可信插件</h2>
-                <p>支持 GitHub shorthand、Git URL 或本地目录。插件可包含 hooks 和 MCP 服务。</p>
+                <h2>{t("plugins.installTrusted")}</h2>
+                <p>{t("plugins.installDescription")}</p>
               </div>
-              <button type="button" className="icon-button" onClick={() => setInstallOpen(false)} aria-label="Close plugin installer">
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setInstallOpen(false)}
+                aria-label={t("plugins.closeInstaller")}
+              >
                 <X size={16} />
               </button>
             </header>
             <div className="extension-dialog__body">
               <label>
-                <span>插件来源</span>
+                <span>{t("plugins.source")}</span>
                 <input
                   value={installSource}
                   onChange={(event) => setInstallSource(event.target.value)}
-                  placeholder={`owner/repo、https://… 或 ${localPluginExample}`}
+                  placeholder={t("plugins.sourcePlaceholder", {
+                    path: localPluginExample,
+                  })}
                   autoFocus
                 />
               </label>
@@ -394,14 +456,20 @@ export function PluginPanel({
                   checked={sourceTrusted}
                   onChange={(event) => setSourceTrusted(event.target.checked)}
                 />
-                <span>我确认信任这个来源，并允许官方 Grok Runtime 激活它包含的代码与工具。</span>
+                <span>{t("plugins.trustSource")}</span>
               </label>
             </div>
             <footer>
-              <button type="button" className="secondary-button" onClick={() => setInstallOpen(false)}>取消</button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setInstallOpen(false)}
+              >
+                {t("common.cancel")}
+              </button>
               <button type="submit" className="primary-button" disabled={!installSource.trim() || !sourceTrusted || Boolean(action)}>
                 {action === "install" ? <SpinnerGap size={15} className="spin" /> : <DownloadSimple size={15} />}
-                安装
+                {t("common.install")}
               </button>
             </footer>
           </form>
@@ -414,21 +482,31 @@ export function PluginPanel({
             <header>
               <span className="is-danger"><Trash size={19} /></span>
               <div>
-                <h2 id="plugin-uninstall-title">卸载 {uninstallTarget.name}？</h2>
-                <p>插件将从 Grok Runtime 移除；当前 ACP 会话不会自动重启。</p>
+                <h2 id="plugin-uninstall-title">
+                  {t("plugins.uninstallTitle", {
+                    name: uninstallTarget.name,
+                  })}
+                </h2>
+                <p>{t("plugins.uninstallDescription")}</p>
               </div>
             </header>
             <div className="extension-dialog__body">
               <label className="extension-confirm-check">
                 <input type="checkbox" checked={keepPluginData} onChange={(event) => setKeepPluginData(event.target.checked)} />
-                <span>保留插件数据，便于以后重新安装</span>
+                <span>{t("plugins.keepData")}</span>
               </label>
             </div>
             <footer>
-              <button type="button" className="secondary-button" onClick={() => setUninstallTarget(null)}>取消</button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setUninstallTarget(null)}
+              >
+                {t("common.cancel")}
+              </button>
               <button type="button" className="danger-button" disabled={Boolean(action)} onClick={() => void confirmUninstall()}>
                 {action?.startsWith("uninstall:") ? <SpinnerGap size={15} className="spin" /> : <Trash size={15} />}
-                确认卸载
+                {t("plugins.confirmUninstall")}
               </button>
             </footer>
           </section>

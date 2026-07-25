@@ -13,15 +13,20 @@ import type {
   WorkspaceTerminalController,
   WorkspaceTerminalTab,
 } from "../hooks/useWorkspaceTerminal";
+import { useI18n } from "../i18n/I18nProvider";
+import type { TranslationKey } from "../i18n/types";
 import {
   detectAppPlatform,
   workspaceShellPresentation,
 } from "../lib/platform";
 
 const quickCommands = [
-  { label: "Git status", command: "git status --short" },
-  { label: "Tests", command: "npm test" },
-  { label: "Build", command: "npm run build" },
+  {
+    labelKey: "terminal.quick.gitStatus" as const,
+    command: "git status --short",
+  },
+  { labelKey: "terminal.quick.tests" as const, command: "npm test" },
+  { labelKey: "terminal.quick.build" as const, command: "npm run build" },
 ];
 
 interface WorkspaceTerminalPanelProps {
@@ -41,6 +46,7 @@ export function WorkspaceTerminalPanel({
   workspaceReady,
   preview,
 }: WorkspaceTerminalPanelProps) {
+  const { t } = useI18n();
   const shell = workspaceShellPresentation(detectAppPlatform());
   const [source, setSource] = useState<"workspace" | "acp">("workspace");
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
@@ -71,18 +77,18 @@ export function WorkspaceTerminalPanel({
     <div className={`terminal-panel terminal-panel--${source}`}>
       <header>
         <span className="terminal-panel__title">
-          <TerminalWindow size={15} /> Terminal
+          <TerminalWindow size={15} /> {t("inspector.terminal")}
         </span>
         {terminal.runningCount > 0 ? (
           <span className="terminal-running-badge" role="status">
             <SpinnerGap size={12} className="spin" />
-            {terminal.runningCount} running
+            {t("terminal.runningCount", { count: terminal.runningCount })}
           </span>
         ) : null}
         <div
           className="terminal-source-switch"
           role="tablist"
-          aria-label="Terminal source"
+          aria-label={t("terminal.source")}
         >
           <button
             type="button"
@@ -91,7 +97,7 @@ export function WorkspaceTerminalPanel({
             className={source === "workspace" ? "is-active" : ""}
             onClick={() => setSource("workspace")}
           >
-            Workspace
+            {t("settings.workspace")}
           </button>
           <button
             type="button"
@@ -100,7 +106,7 @@ export function WorkspaceTerminalPanel({
             className={source === "acp" ? "is-active" : ""}
             onClick={() => setSource("acp")}
           >
-            ACP log
+            {t("terminal.acpLog")}
           </button>
         </div>
         <button
@@ -108,7 +114,11 @@ export function WorkspaceTerminalPanel({
           className="icon-button"
           onClick={source === "workspace" ? terminal.clear : onClearRuntime}
           disabled={source === "workspace" && terminal.activeTabRunning}
-          aria-label={`Clear ${source === "workspace" ? "active terminal" : "ACP log"}`}
+          aria-label={
+            source === "workspace"
+              ? t("terminal.clearActive")
+              : t("terminal.clearAcpLog")
+          }
         >
           <Trash size={15} />
         </button>
@@ -116,7 +126,11 @@ export function WorkspaceTerminalPanel({
 
       {source === "workspace" ? (
         <>
-          <div className="terminal-tab-strip" role="tablist" aria-label="Workspace terminals">
+          <div
+            className="terminal-tab-strip"
+            role="tablist"
+            aria-label={t("terminal.workspaceTerminals")}
+          >
             <div className="terminal-tab-strip__scroll">
               {terminal.tabs.map((tab) => {
                 const selected = tab.id === terminal.activeTabId;
@@ -130,7 +144,9 @@ export function WorkspaceTerminalPanel({
                         autoFocus
                         value={renameValue}
                         maxLength={32}
-                        aria-label={`Rename ${tab.title}`}
+                        aria-label={t("terminal.renameAria", {
+                          title: tab.title,
+                        })}
                         onChange={(event) => setRenameValue(event.target.value)}
                         onBlur={finishRename}
                         onKeyDown={(event) => {
@@ -166,7 +182,9 @@ export function WorkspaceTerminalPanel({
                         type="button"
                         className="terminal-tab__action"
                         onClick={() => beginRename(tab)}
-                        aria-label={`Rename ${tab.title}`}
+                        aria-label={t("terminal.renameAria", {
+                          title: tab.title,
+                        })}
                       >
                         <PencilSimple size={11} />
                       </button>
@@ -177,8 +195,14 @@ export function WorkspaceTerminalPanel({
                         className="terminal-tab__action"
                         onClick={() => terminal.closeTab(tab.id)}
                         disabled={Boolean(tab.runningCommand)}
-                        aria-label={`Close ${tab.title}`}
-                        title={tab.runningCommand ? "Stop this command before closing its terminal" : undefined}
+                        aria-label={t("terminal.closeAria", {
+                          title: tab.title,
+                        })}
+                        title={
+                          tab.runningCommand
+                            ? t("terminal.stopBeforeClose")
+                            : undefined
+                        }
                       >
                         <X size={11} />
                       </button>
@@ -192,25 +216,28 @@ export function WorkspaceTerminalPanel({
               className="terminal-tab-add"
               onClick={terminal.addTab}
               disabled={!terminal.canAddTab}
-              aria-label="New terminal"
+              aria-label={t("terminal.new")}
               title={
                 terminal.canAddTab
-                  ? "New terminal"
-                  : `Up to ${terminal.maxTabs} terminals are available`
+                  ? t("terminal.new")
+                  : t("terminal.maximum", { count: terminal.maxTabs })
               }
             >
               <Plus size={14} />
             </button>
           </div>
-          <div className="terminal-quick-actions" aria-label="Common workspace commands">
+          <div
+            className="terminal-quick-actions"
+            aria-label={t("terminal.commonCommands")}
+          >
             {quickCommands.map((item) => (
               <button
                 type="button"
-                key={item.label}
+                key={item.labelKey}
                 disabled={commandDisabled}
                 onClick={() => terminal.setDraft(item.command)}
               >
-                {item.label}
+                {t(item.labelKey as TranslationKey)}
               </button>
             ))}
           </div>
@@ -227,10 +254,10 @@ export function WorkspaceTerminalPanel({
             ) : (
               <div className="terminal-empty">
                 {preview
-                  ? "Browser preview is read-only. Open the installed app to run workspace commands."
+                  ? t("terminal.previewEmpty")
                   : workspaceReady
-                    ? `Run a ${shell.commandNoun} in this terminal. You can keep it running while opening another task or terminal. Output is not saved.`
-                    : "Choose a workspace to enable the terminal."}
+                    ? t("terminal.readyEmpty")
+                    : t("terminal.chooseWorkspace")}
               </div>
             )}
           </div>
@@ -261,8 +288,14 @@ export function WorkspaceTerminalPanel({
                   void terminal.run();
                 }
               }}
-              placeholder={workspaceReady ? shell.placeholder : "Choose a workspace first"}
-              aria-label={`Workspace ${shell.commandNoun}`}
+              placeholder={
+                workspaceReady
+                  ? shell.name === "PowerShell"
+                    ? t("terminal.placeholder.powershell")
+                    : t("terminal.placeholder.shell")
+                  : t("terminal.chooseWorkspaceFirst")
+              }
+              aria-label={t("terminal.commandAria")}
               spellCheck={false}
             />
             {terminal.activeTabRunning ? (
@@ -277,7 +310,7 @@ export function WorkspaceTerminalPanel({
                 ) : (
                   <Stop size={14} weight="fill" />
                 )}
-                Stop
+                {t("common.stop")}
               </button>
             ) : (
               <button
@@ -285,19 +318,24 @@ export function WorkspaceTerminalPanel({
                 className="terminal-run-button"
                 disabled={commandDisabled || !terminal.draft.trim()}
               >
-                <Play size={14} weight="fill" /> Run
+                <Play size={14} weight="fill" /> {t("terminal.run")}
               </button>
             )}
           </form>
           <footer title={workspacePath || undefined}>
             <span>
               {preview
-                ? "Desktop-only execution"
+                ? t("terminal.desktopOnly")
                 : terminal.runningCount > 0
-                  ? `${terminal.runningCount} background command${terminal.runningCount === 1 ? "" : "s"}`
-                  : `${shell.name} · user initiated`}
+                  ? t(
+                      terminal.runningCount === 1
+                        ? "terminal.backgroundCommand.one"
+                        : "terminal.backgroundCommand.other",
+                      { count: terminal.runningCount },
+                    )
+                  : t("terminal.userInitiated", { shell: shell.name })}
             </span>
-            <span>{workspacePath || "No workspace selected"}</span>
+            <span>{workspacePath || t("terminal.noWorkspace")}</span>
           </footer>
         </>
       ) : (
@@ -309,7 +347,7 @@ export function WorkspaceTerminalPanel({
               </div>
             ))
           ) : (
-            <div className="terminal-empty">Real ACP and Grok Runtime output will appear here.</div>
+            <div className="terminal-empty">{t("terminal.acpEmpty")}</div>
           )}
         </div>
       )}

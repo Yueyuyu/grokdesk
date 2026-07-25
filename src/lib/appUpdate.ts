@@ -41,8 +41,18 @@ export function reduceUpdateDownloadProgress(
   };
 }
 
-export function formatUpdateSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+export function formatUpdateSize(bytes: number, locale = "en") {
+  if (bytes < 1024) {
+    return `${new Intl.NumberFormat(locale).format(bytes)} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${new Intl.NumberFormat(locale, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(bytes / 1024)} KiB`;
+  }
+  return `${new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(bytes / (1024 * 1024))} MiB`;
 }

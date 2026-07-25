@@ -13,6 +13,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import type { WorkspaceChangesController } from "../hooks/useWorkspaceChanges";
+import { useI18n } from "../i18n/I18nProvider";
 import type { WorkspaceChange } from "../types";
 
 interface WorkspaceChangesPanelProps {
@@ -27,27 +28,21 @@ const statusClass = (status: WorkspaceChange["statusCode"]) =>
       ? "conflict"
       : status.toLowerCase();
 
-const changeState = (change: WorkspaceChange) =>
-  change.staged && change.unstaged
-    ? "Partially accepted"
-    : change.staged
-      ? "Accepted"
-      : "Pending";
-
 function WorkspaceEmptyState({
   workspace,
   onChooseWorkspace,
 }: WorkspaceChangesPanelProps) {
+  const { t } = useI18n();
   const { snapshot, loading } = workspace;
   if (workspace.error) {
     return (
       <div className="inspector-empty-state">
         <span><Warning size={23} weight="fill" /></span>
-        <strong>Workspace inspection failed</strong>
+        <strong>{t("changes.inspectionFailed")}</strong>
         <p>{workspace.error}</p>
         <button type="button" className="secondary-button" onClick={() => void workspace.refresh()}>
           <ArrowCounterClockwise size={15} />
-          Try again
+          {t("common.retry")}
         </button>
       </div>
     );
@@ -56,8 +51,8 @@ function WorkspaceEmptyState({
     return (
       <div className="inspector-empty-state">
         <span><SpinnerGap size={23} className="spin" /></span>
-        <strong>Inspecting workspace…</strong>
-        <p>Reading the selected folder and Git working tree.</p>
+        <strong>{t("changes.inspecting")}</strong>
+        <p>{t("changes.inspectingDescription")}</p>
       </div>
     );
   }
@@ -66,11 +61,11 @@ function WorkspaceEmptyState({
     return (
       <div className="inspector-empty-state">
         <span><FolderOpen size={23} /></span>
-        <strong>Choose a project folder</strong>
-        <p>{snapshot.message}</p>
+        <strong>{t("task.chooseProjectFolder")}</strong>
+        <p>{t("changes.chooseWorkspaceDescription")}</p>
         <button type="button" className="primary-button" onClick={onChooseWorkspace}>
           <FolderOpen size={15} />
-          Choose folder
+          {t("common.chooseFolder")}
         </button>
       </div>
     );
@@ -80,8 +75,16 @@ function WorkspaceEmptyState({
     return (
       <div className="inspector-empty-state">
         <span><GitBranch size={23} /></span>
-        <strong>{snapshot.mode === "not_git" ? "Git repository not found" : "Desktop inspection required"}</strong>
-        <p>{snapshot.message}</p>
+        <strong>
+          {snapshot.mode === "not_git"
+            ? t("changes.notGit")
+            : t("changes.desktopRequired")}
+        </strong>
+        <p>
+          {snapshot.mode === "not_git"
+            ? t("changes.notGitDescription")
+            : t("changes.desktopRequiredDescription")}
+        </p>
       </div>
     );
   }
@@ -89,11 +92,11 @@ function WorkspaceEmptyState({
   return (
     <div className="inspector-empty-state inspector-empty-state--success">
       <span><CheckCircle size={23} weight="fill" /></span>
-      <strong>Working tree clean</strong>
-      <p>No staged, modified, deleted, or untracked files were found.</p>
+      <strong>{t("changes.clean")}</strong>
+      <p>{t("changes.cleanDescription")}</p>
       <button type="button" className="secondary-button" onClick={() => void workspace.refresh()}>
         <ArrowCounterClockwise size={15} />
-        Refresh
+        {t("common.refresh")}
       </button>
     </div>
   );
@@ -103,6 +106,7 @@ export function WorkspaceChangesPanel({
   workspace,
   onChooseWorkspace,
 }: WorkspaceChangesPanelProps) {
+  const { t } = useI18n();
   const [discardPath, setDiscardPath] = useState<string | null>(null);
   const {
     snapshot,
@@ -126,23 +130,29 @@ export function WorkspaceChangesPanel({
   const copyDiff = async () => {
     if (diff?.patch) await navigator.clipboard?.writeText(diff.patch);
   };
+  const changeState = (change: WorkspaceChange) =>
+    change.staged && change.unstaged
+      ? t("changes.partiallyAccepted")
+      : change.staged
+        ? t("changes.accepted")
+        : t("common.pending");
 
   return (
     <div className="inspector__content inspector__content--changes">
       {snapshot.mode === "preview_simulation" ? (
         <div className="workspace-preview-banner" role="note">
           <Warning size={14} />
-          <span>{snapshot.message}</span>
+          <span>{t("changes.previewNotice")}</span>
         </div>
       ) : (
         <div className="workspace-scope-note" role="note">
-          Git shows every workspace change, including edits made before this task.
+          {t("changes.scopeNotice")}
         </div>
       )}
 
       <section className="changed-files">
         <header>
-          <strong>Changed files</strong>
+          <strong>{t("changes.changedFiles")}</strong>
           <span className="count-badge">{snapshot.changes.length}</span>
           <span className="changed-files__spacer" />
           {snapshot.branch ? (
@@ -155,7 +165,7 @@ export function WorkspaceChangesPanel({
             type="button"
             className="icon-button"
             onClick={() => void workspace.refresh()}
-            aria-label="Refresh workspace changes"
+            aria-label={t("changes.refreshAria")}
             disabled={workspace.loading || Boolean(actionPending)}
           >
             <ArrowCounterClockwise size={15} className={workspace.loading ? "spin" : ""} />
@@ -173,7 +183,13 @@ export function WorkspaceChangesPanel({
               <FileText size={15} />
               <span>
                 {change.path}
-                {change.originalPath ? <small>from {change.originalPath}</small> : null}
+                {change.originalPath ? (
+                  <small>
+                    {t("changes.renamedFrom", {
+                      path: change.originalPath,
+                    })}
+                  </small>
+                ) : null}
               </span>
               <em className={`file-status file-status--${statusClass(change.statusCode)}`}>
                 {change.staged ? <Check size={9} weight="bold" /> : null}
@@ -184,7 +200,12 @@ export function WorkspaceChangesPanel({
         </div>
       </section>
 
-      <section className="diff-panel" aria-label={`Diff for ${selectedPath ?? "selected file"}`}>
+      <section
+        className="diff-panel"
+        aria-label={t("changes.diffAria", {
+          path: selectedPath ?? t("changes.selectedFile"),
+        })}
+      >
         <header>
           <span title={selectedPath ?? undefined}>{selectedPath}</span>
           {selectedChange ? <em>{changeState(selectedChange)}</em> : null}
@@ -192,7 +213,7 @@ export function WorkspaceChangesPanel({
             type="button"
             className="icon-button"
             onClick={() => void copyDiff()}
-            aria-label="Copy diff"
+            aria-label={t("changes.copyDiff")}
             disabled={!diff?.patch}
           >
             <Copy size={15} />
@@ -200,9 +221,14 @@ export function WorkspaceChangesPanel({
         </header>
         <div className="diff-code" role="region" tabIndex={0}>
           {diffLoading ? (
-            <div className="diff-placeholder"><SpinnerGap size={18} className="spin" /> Loading diff…</div>
+            <div className="diff-placeholder">
+              <SpinnerGap size={18} className="spin" />{" "}
+              {t("changes.loadingDiff")}
+            </div>
           ) : diff?.binary ? (
-            <div className="diff-placeholder"><GitDiff size={18} /> Binary files cannot be previewed.</div>
+            <div className="diff-placeholder">
+              <GitDiff size={18} /> {t("changes.binaryDiff")}
+            </div>
           ) : diffLines.length > 0 ? (
             diffLines.map((line, index) => (
               <div className={`diff-line diff-line--${line.kind}`} key={`${line.kind}-${index}`}>
@@ -215,16 +241,27 @@ export function WorkspaceChangesPanel({
               </div>
             ))
           ) : (
-            <div className="diff-placeholder"><GitDiff size={18} /> No textual diff is available.</div>
+            <div className="diff-placeholder">
+              <GitDiff size={18} /> {t("changes.noDiff")}
+            </div>
           )}
-          {diff?.truncated ? <div className="diff-truncated">Diff preview was truncated for performance.</div> : null}
+          {diff?.truncated ? (
+            <div className="diff-truncated">{t("changes.diffTruncated")}</div>
+          ) : null}
         </div>
       </section>
 
-      <section className="change-review-bar" aria-label="Review selected change">
+      <section
+        className="change-review-bar"
+        aria-label={t("changes.reviewSelected")}
+      >
         <div>
-          <strong>{selectedChange ? changeState(selectedChange) : "No file selected"}</strong>
-          <small>Accept stages this file in Git. Revert restores HEAD or removes an untracked file.</small>
+          <strong>
+            {selectedChange
+              ? changeState(selectedChange)
+              : t("changes.noFileSelected")}
+          </strong>
+          <small>{t("changes.reviewDescription")}</small>
         </div>
         <div className="change-review-bar__actions">
           {selectedChange?.staged ? (
@@ -235,7 +272,7 @@ export function WorkspaceChangesPanel({
               onClick={() => selectedPath && void workspace.unstage(selectedPath)}
             >
               <ArrowCounterClockwise size={14} />
-              Undo accept
+              {t("changes.undoAccept")}
             </button>
           ) : (
             <button
@@ -245,7 +282,7 @@ export function WorkspaceChangesPanel({
               onClick={() => selectedPath && void workspace.stage(selectedPath)}
             >
               <Check size={14} weight="bold" />
-              Accept
+              {t("changes.accept")}
             </button>
           )}
           <button
@@ -255,7 +292,7 @@ export function WorkspaceChangesPanel({
             onClick={() => selectedPath && setDiscardPath(selectedPath)}
           >
             <ArrowCounterClockwise size={14} />
-            Revert
+            {t("changes.revert")}
           </button>
         </div>
       </section>
@@ -264,10 +301,16 @@ export function WorkspaceChangesPanel({
         <section className="change-confirmation" role="alertdialog" aria-modal="false">
           <Warning size={18} weight="fill" />
           <div>
-            <strong>Revert {discardPath}?</strong>
-            <p>This permanently discards the selected working-tree change. GrokDesk cannot undo it.</p>
+            <strong>{t("changes.revertTitle", { path: discardPath })}</strong>
+            <p>{t("changes.revertDescription")}</p>
           </div>
-          <button type="button" className="secondary-button" onClick={() => setDiscardPath(null)}>Cancel</button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setDiscardPath(null)}
+          >
+            {t("common.cancel")}
+          </button>
           <button
             type="button"
             className="danger-button"
@@ -277,7 +320,7 @@ export function WorkspaceChangesPanel({
               if (discarded) setDiscardPath(null);
             }}
           >
-            Revert file
+            {t("changes.revertFile")}
           </button>
         </section>
       ) : null}
@@ -285,7 +328,13 @@ export function WorkspaceChangesPanel({
       {error ? (
         <div className="workspace-inline-message workspace-inline-message--error" role="alert">
           <span>{error}</span>
-          <button type="button" onClick={workspace.clearError} aria-label="Dismiss workspace error"><X size={13} /></button>
+          <button
+            type="button"
+            onClick={workspace.clearError}
+            aria-label={t("changes.dismissError")}
+          >
+            <X size={13} />
+          </button>
         </div>
       ) : lastAction ? (
         <div className="workspace-inline-message" role="status">{lastAction}</div>

@@ -13,6 +13,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 import {
   addGrokMcpServer,
   diagnoseGrokMcpServer,
@@ -64,6 +65,7 @@ export function McpPanel({
   connected,
   onOpenSettings,
 }: McpPanelProps) {
+  const { formatNumber, t } = useI18n();
   const localProjectExample = localPathExample(detectAppPlatform());
   const workspaceReady = isWorkspaceSelected(workspacePath);
   const [catalog, setCatalog] = useState<GrokMcpCatalog>(emptyCatalog);
@@ -107,9 +109,9 @@ export function McpPanel({
   const withRestartNotice = useCallback(
     (message: string) =>
       connected
-        ? `${message} 重新连接 ACP 后，新配置会进入 Grok 会话。`
+        ? `${message} ${t("extensions.reconnectNotice")}`
         : message,
-    [connected],
+    [connected, t],
   );
 
   const submitAdd = async (event: FormEvent) => {
@@ -151,7 +153,9 @@ export function McpPanel({
     } catch (cause) {
       setDoctorResults((current) => ({
         ...current,
-        [server.name]: `诊断失败：${errorMessage(cause)}`,
+        [server.name]: t("mcp.diagnosisFailed", {
+          error: errorMessage(cause),
+        }),
       }));
     } finally {
       setAction(null);
@@ -195,8 +199,8 @@ export function McpPanel({
       <header className="feature-panel__header extension-panel__header">
         <span className="feature-panel__icon"><PlugsConnected size={22} /></span>
         <div>
-          <h1>MCP servers</h1>
-          <p>读取、诊断并管理官方 Grok Runtime 使用的工具连接。</p>
+          <h1>{t("mcp.title")}</h1>
+          <p>{t("mcp.description")}</p>
         </div>
         <div className="extension-header-actions">
           <button
@@ -206,7 +210,7 @@ export function McpPanel({
             disabled={loading || Boolean(action)}
           >
             <ArrowClockwise size={16} className={loading ? "spin" : ""} />
-            刷新
+            {t("common.refresh")}
           </button>
           <button
             type="button"
@@ -218,14 +222,15 @@ export function McpPanel({
             disabled={readOnly || Boolean(action)}
           >
             <Plus size={16} />
-            添加服务器
+            {t("mcp.addServer")}
           </button>
         </div>
       </header>
 
       {preview ? (
         <div className="extension-banner">
-          浏览器预览不读取或伪造本机 MCP 配置。安装版会通过官方 <code>grok mcp</code> 命令显示真实结果。
+          {t("mcp.preview.before")} <code>grok mcp</code>{" "}
+          {t("mcp.preview.after")}
         </div>
       ) : null}
 
@@ -236,24 +241,30 @@ export function McpPanel({
       {unavailable ? (
         <section className="feature-empty-state">
           <span><PlugsConnected size={24} /></span>
-          <h2>需要 Grok Runtime</h2>
-          <p>安装官方 Runtime 后，才能读取和管理真实 MCP 配置。</p>
-          <button type="button" className="primary-button" onClick={onOpenSettings}>打开设置</button>
+          <h2>{t("extensions.runtimeRequired")}</h2>
+          <p>{t("mcp.runtimeRequiredDescription")}</p>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={onOpenSettings}
+          >
+            {t("common.openSettings")}
+          </button>
         </section>
       ) : loading && catalog.servers.length === 0 ? (
         <section className="feature-empty-state">
           <span><SpinnerGap size={24} className="spin" /></span>
-          <h2>正在读取 MCP 配置</h2>
-          <p>数据直接来自本机官方 Runtime。</p>
+          <h2>{t("mcp.loading")}</h2>
+          <p>{t("extensions.runtimeSource")}</p>
         </section>
       ) : catalog.servers.length === 0 ? (
         <section className="feature-empty-state feature-empty-state--compact">
           <span><PlugsConnected size={24} /></span>
-          <h2>尚未配置 MCP 服务器</h2>
-          <p>可以添加原生 HTTP / SSE 端点，或一个本地 stdio 命令。Grok Runtime 会负责连接与 OAuth。</p>
+          <h2>{t("mcp.emptyTitle")}</h2>
+          <p>{t("mcp.emptyDescription")}</p>
           {!readOnly ? (
             <button type="button" className="primary-button" onClick={() => setAddOpen(true)}>
-              添加第一个服务器
+              {t("mcp.addFirst")}
             </button>
           ) : null}
         </section>
@@ -269,17 +280,25 @@ export function McpPanel({
                   <div className="extension-card__title">
                     <h2>{server.name}</h2>
                     <span className={`extension-status ${server.enabled ? "is-enabled" : ""}`}>
-                      {server.enabled ? server.status || "已启用" : "已停用"}
+                      {server.enabled
+                        ? server.status || t("common.enabled")
+                        : t("common.disabled")}
                     </span>
                   </div>
                   <p className="extension-endpoint" title={server.endpoint || undefined}>
-                    {server.endpoint || "官方 CLI 未公开连接地址"}
+                    {server.endpoint || t("mcp.endpointUnavailable")}
                   </p>
                   <div className="extension-meta">
                     <span>{server.transport}</span>
                     {server.scope ? <span>{server.scope}</span> : null}
                     {server.source ? <span>{server.source}</span> : null}
-                    {server.toolCount > 0 ? <span>{server.toolCount} tools</span> : null}
+                    {server.toolCount > 0 ? (
+                      <span>
+                        {t("mcp.toolCount", {
+                          count: formatNumber(server.toolCount),
+                        })}
+                      </span>
+                    ) : null}
                   </div>
                   {diagnosis ? <div className="extension-diagnostic" role="status">{diagnosis}</div> : null}
                 </div>
@@ -291,14 +310,16 @@ export function McpPanel({
                     onClick={() => void diagnose(server)}
                   >
                     {diagnosing ? <SpinnerGap size={14} className="spin" /> : <Wrench size={14} />}
-                    诊断
+                    {t("mcp.diagnose")}
                   </button>
                   <button
                     type="button"
                     className="icon-button extension-card__delete"
                     disabled={Boolean(action)}
                     onClick={() => openRemove(server)}
-                    aria-label={`Remove ${server.name}`}
+                    aria-label={t("mcp.removeAria", {
+                      name: server.name,
+                    })}
                   >
                     <Trash size={16} />
                   </button>
@@ -315,60 +336,79 @@ export function McpPanel({
             <header>
               <span><Plus size={19} /></span>
               <div>
-                <h2>添加 MCP 服务器</h2>
-                <p>配置由官方 Grok CLI 写入；GrokDesk 不保存表单内容或认证令牌。</p>
+                <h2>{t("mcp.addTitle")}</h2>
+                <p>{t("mcp.addDescription")}</p>
               </div>
-              <button type="button" className="icon-button" onClick={() => setAddOpen(false)} aria-label="Close MCP form">
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setAddOpen(false)}
+                aria-label={t("mcp.closeForm")}
+              >
                 <X size={16} />
               </button>
             </header>
             <div className="extension-dialog__body extension-form-grid">
               <label>
-                <span>名称</span>
+                <span>{t("mcp.name")}</span>
                 <input
                   value={draft.name}
                   onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-                  placeholder="例如 sentry 或 project-tools"
+                  placeholder={t("mcp.namePlaceholder")}
                   aria-invalid={draft.name.length > 0 && !isValidMcpName(draft.name)}
                   autoFocus
                 />
                 {draft.name.length > 0 && !isValidMcpName(draft.name) ? (
-                  <small>仅支持字母、数字、连字符和下划线。</small>
+                  <small>{t("mcp.nameValidation")}</small>
                 ) : null}
               </label>
               <label>
-                <span>传输方式</span>
+                <span>{t("mcp.transport")}</span>
                 <select
                   value={draft.transport}
                   onChange={(event) => setDraft((current) => ({ ...current, transport: event.target.value as McpTransport }))}
                 >
                   <option value="http">HTTP</option>
                   <option value="sse">SSE</option>
-                  <option value="stdio">stdio（本地进程）</option>
+                  <option value="stdio">
+                    {t("mcp.stdioLocal")}
+                  </option>
                 </select>
               </label>
               <label>
-                <span>配置范围</span>
+                <span>{t("mcp.scope")}</span>
                 <select
                   value={draft.scope}
                   onChange={(event) => setDraft((current) => ({ ...current, scope: event.target.value as McpScope }))}
                 >
-                  <option value="user">用户级：所有项目</option>
-                  <option value="project" disabled={!workspaceReady}>项目级：当前工作区</option>
+                  <option value="user">{t("mcp.scopeUserAll")}</option>
+                  <option value="project" disabled={!workspaceReady}>
+                    {t("mcp.scopeProjectCurrent")}
+                  </option>
                 </select>
-                {!workspaceReady ? <small>选择工作区后才能写入项目级配置。</small> : null}
+                {!workspaceReady ? (
+                  <small>{t("mcp.scopeWorkspaceRequired")}</small>
+                ) : null}
               </label>
               <label className="extension-form-grid__full">
-                <span>{draft.transport === "stdio" ? "启动命令" : "服务器 URL"}</span>
+                <span>
+                  {draft.transport === "stdio"
+                    ? t("mcp.startCommand")
+                    : t("mcp.serverUrl")}
+                </span>
                 <input
                   value={draft.target}
                   onChange={(event) => setDraft((current) => ({ ...current, target: event.target.value }))}
-                  placeholder={draft.transport === "stdio" ? "例如 npx" : "https://mcp.example.com/mcp"}
+                  placeholder={
+                    draft.transport === "stdio"
+                      ? t("mcp.commandPlaceholder")
+                      : "https://mcp.example.com/mcp"
+                  }
                 />
               </label>
               {draft.transport === "stdio" ? (
                 <label className="extension-form-grid__full">
-                  <span>命令参数（每行一个）</span>
+                  <span>{t("mcp.arguments")}</span>
                   <textarea
                     rows={4}
                     value={draft.argumentLines}
@@ -378,14 +418,21 @@ export function McpPanel({
                 </label>
               ) : null}
               <div className="extension-security-note extension-form-grid__full">
-                不要在这里粘贴 Token。远程 OAuth 由 Grok Runtime 处理；静态凭据请在官方配置中使用 <code>{"${VAR}"}</code> 环境变量引用。
+                {t("mcp.securityNote.before")} <code>{"${VAR}"}</code>{" "}
+                {t("mcp.securityNote.after")}
               </div>
             </div>
             <footer>
-              <button type="button" className="secondary-button" onClick={() => setAddOpen(false)}>取消</button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setAddOpen(false)}
+              >
+                {t("common.cancel")}
+              </button>
               <button type="submit" className="primary-button" disabled={!isValidMcpName(draft.name) || !draft.target.trim() || Boolean(action)}>
                 {action === "add" ? <SpinnerGap size={15} className="spin" /> : <Plus size={15} />}
-                添加服务器
+                {t("mcp.addServer")}
               </button>
             </footer>
           </form>
@@ -398,24 +445,34 @@ export function McpPanel({
             <header>
               <span className="is-danger"><Trash size={19} /></span>
               <div>
-                <h2 id="mcp-remove-title">移除 {removeTarget.name}？</h2>
-                <p>这会从所选 Grok 配置范围删除服务器定义，不会删除第三方账号或远程数据。</p>
+                <h2 id="mcp-remove-title">
+                  {t("mcp.removeTitle", { name: removeTarget.name })}
+                </h2>
+                <p>{t("mcp.removeDescription")}</p>
               </div>
             </header>
             <div className="extension-dialog__body">
               <label>
-                <span>从哪个范围删除</span>
+                <span>{t("mcp.removeScope")}</span>
                 <select value={removeScope} onChange={(event) => setRemoveScope(event.target.value as McpScope)}>
-                  <option value="user">用户级配置</option>
-                  <option value="project" disabled={!workspaceReady}>当前项目配置</option>
+                  <option value="user">{t("mcp.scopeUser")}</option>
+                  <option value="project" disabled={!workspaceReady}>
+                    {t("mcp.scopeProject")}
+                  </option>
                 </select>
               </label>
             </div>
             <footer>
-              <button type="button" className="secondary-button" onClick={() => setRemoveTarget(null)}>取消</button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setRemoveTarget(null)}
+              >
+                {t("common.cancel")}
+              </button>
               <button type="button" className="danger-button" disabled={Boolean(action)} onClick={() => void confirmRemove()}>
                 {action?.startsWith("remove:") ? <SpinnerGap size={15} className="spin" /> : <Trash size={15} />}
-                确认移除
+                {t("mcp.confirmRemove")}
               </button>
             </footer>
           </section>

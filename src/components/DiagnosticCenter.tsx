@@ -14,17 +14,26 @@ import {
   formatDiagnosticReport,
   getDiagnosticCounts,
   getOverallDiagnosticStatus,
-  diagnosticStatusLabels,
 } from "../lib/diagnostics";
+import { useI18n } from "../i18n/I18nProvider";
+import type { TranslationKey } from "../i18n/types";
 import {
   runDiagnostics,
   writeDiagnosticReportFile,
 } from "../lib/desktop";
 import type {
   DiagnosticActionKind,
+  DiagnosticCheck,
   DiagnosticStatus,
   DiagnosticReport,
 } from "../types";
+
+const diagnosticStatusKeys: Record<DiagnosticStatus, TranslationKey> = {
+  healthy: "diagnostics.healthy",
+  attention: "diagnostics.needsAttention",
+  blocked: "common.blocked",
+  info: "diagnostics.optional",
+};
 
 interface DiagnosticCenterProps {
   workspacePath: string;
@@ -54,6 +63,7 @@ export function DiagnosticCenter({
   onChooseWorkspace,
   onOpenMcp,
 }: DiagnosticCenterProps) {
+  const { formatNumber, t } = useI18n();
   const [report, setReport] = useState<DiagnosticReport | null>(null);
   const [running, setRunning] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
@@ -87,6 +97,115 @@ export function DiagnosticCenter({
 
   const counts = useMemo(() => getDiagnosticCounts(report), [report]);
   const overall = getOverallDiagnosticStatus(report);
+  const actionLabel = (kind: DiagnosticActionKind) => {
+    if (kind === "install_runtime") return t("settings.runtime.install");
+    if (kind === "sign_in") return t("account.signIn");
+    if (kind === "choose_workspace") return t("common.chooseWorkspace");
+    if (kind === "connect_acp") return t("settings.runtime.connect");
+    return t("palette.openMcp");
+  };
+  const localizeCheck = (check: DiagnosticCheck) => {
+    if (check.id === "native-shell") {
+      return {
+        title: t("diagnostics.check.native.title"),
+        summary: t("diagnostics.check.native.summary", {
+          version: report?.appVersion ?? "",
+        }),
+        detail: t("diagnostics.check.native.detail"),
+      };
+    }
+    if (check.id === "signed-updater") {
+      return {
+        title: t("diagnostics.check.updater.title"),
+        summary: t("diagnostics.check.updater.summary"),
+        detail: t("diagnostics.check.updater.detail"),
+      };
+    }
+    if (check.id === "runtime") {
+      return {
+        title: t("diagnostics.check.runtime.title"),
+        summary:
+          check.status === "healthy"
+            ? report?.runtimeVersion ?? t("diagnostics.runtimeDetected")
+            : check.status === "attention"
+              ? t("diagnostics.check.runtime.attention")
+              : t("diagnostics.check.runtime.blocked"),
+        detail:
+          check.status === "healthy"
+            ? t("diagnostics.check.runtime.healthyDetail")
+            : check.status === "attention"
+              ? t("diagnostics.check.runtime.attentionDetail")
+              : t("diagnostics.check.runtime.blockedDetail"),
+      };
+    }
+    if (check.id === "credentials") {
+      const action = check.action?.kind;
+      return {
+        title: t("diagnostics.check.credentials.title"),
+        summary:
+          check.status === "healthy"
+            ? t("diagnostics.check.credentials.healthy")
+            : action === "install_runtime"
+              ? t("diagnostics.check.credentials.runtimeMissing")
+              : action === "sign_in"
+                ? t("diagnostics.check.credentials.missing")
+                : t("diagnostics.check.credentials.unverified"),
+        detail:
+          check.status === "healthy"
+            ? t("diagnostics.check.credentials.healthyDetail")
+            : t("diagnostics.check.credentials.detail"),
+      };
+    }
+    if (check.id === "workspace") {
+      return {
+        title:
+          check.status === "healthy" || check.status === "attention"
+            ? t("diagnostics.check.workspaceGit.title")
+            : t("diagnostics.check.workspace.title"),
+        summary:
+          check.status === "healthy"
+            ? t("diagnostics.check.workspace.healthy")
+            : check.status === "attention"
+              ? t("diagnostics.check.workspace.notGit")
+              : report?.workspaceSelected
+                ? t("diagnostics.check.workspace.inaccessible")
+                : t("diagnostics.check.workspace.missing"),
+        detail:
+          check.status === "healthy"
+            ? t("diagnostics.check.workspace.healthyDetail")
+            : check.status === "attention"
+              ? t("diagnostics.check.workspace.notGitDetail")
+              : t("diagnostics.check.workspace.blockedDetail"),
+      };
+    }
+    if (check.id === "acp") {
+      return {
+        title: t("diagnostics.check.acp.title"),
+        summary:
+          check.status === "healthy"
+            ? t("diagnostics.check.acp.healthy")
+            : check.action?.kind === "connect_acp"
+              ? t("diagnostics.check.acp.disconnected")
+              : t("diagnostics.check.acp.blocked"),
+        detail:
+          check.status === "healthy"
+            ? t("diagnostics.check.acp.healthyDetail")
+            : t("diagnostics.check.acp.detail"),
+      };
+    }
+    return {
+      title: t("diagnostics.check.mcp.title"),
+      summary:
+        check.status === "healthy"
+          ? t("diagnostics.check.mcp.healthy")
+          : check.status === "info"
+            ? t("diagnostics.check.mcp.empty")
+            : check.status === "blocked"
+              ? t("diagnostics.check.mcp.blocked")
+              : t("diagnostics.check.mcp.attention"),
+      detail: t("diagnostics.check.mcp.detail"),
+    };
+  };
 
   const performAction = async (id: string, kind: DiagnosticActionKind) => {
     setActionBusy(id);
@@ -121,7 +240,7 @@ export function DiagnosticCenter({
         workspacePath,
       );
       const saved = await writeDiagnosticReportFile(content);
-      if (saved) setNotice("Sanitized diagnostics report exported.");
+      if (saved) setNotice(t("diagnostics.exported"));
     } catch (cause) {
       setError(String(cause));
     } finally {
@@ -134,8 +253,8 @@ export function DiagnosticCenter({
       <header className="feature-panel__header diagnostic-center__header">
         <span className="feature-panel__icon"><Pulse size={22} /></span>
         <div>
-          <h1>Diagnostics</h1>
-          <p>Check the native app, signed updater, Runtime, OAuth, ACP, workspace, Git, and MCP.</p>
+          <h1>{t("nav.diagnostics")}</h1>
+          <p>{t("diagnostics.description")}</p>
         </div>
         <div className="diagnostic-header-actions">
           <button
@@ -145,7 +264,7 @@ export function DiagnosticCenter({
             onClick={() => void exportReport()}
           >
             {exporting ? <SpinnerGap size={15} className="spin" /> : <DownloadSimple size={15} />}
-            {exporting ? "Exporting…" : "Export report"}
+            {exporting ? t("storage.exporting") : t("diagnostics.export")}
           </button>
           <button
             type="button"
@@ -154,7 +273,7 @@ export function DiagnosticCenter({
             onClick={() => void run()}
           >
             <ArrowClockwise size={15} className={running ? "spin" : undefined} />
-            {running ? "Checking…" : "Run diagnostics"}
+            {running ? t("common.checking") : t("diagnostics.run")}
           </button>
         </div>
       </header>
@@ -162,54 +281,72 @@ export function DiagnosticCenter({
       {preview ? (
         <>
           <div className="settings-preview-note diagnostic-preview-note">
-            浏览器预览不会伪造 Runtime、OAuth、ACP、工作区或 MCP 健康状态。请在安装版中运行真实诊断。
+            {t("diagnostics.previewNotice")}
           </div>
           <div className="feature-empty-state">
             <span><Pulse size={23} /></span>
-            <h2>No simulated diagnostics</h2>
-            <p>The installed app runs every check locally and returns only sanitized status metadata.</p>
+            <h2>{t("diagnostics.previewTitle")}</h2>
+            <p>{t("diagnostics.previewDescription")}</p>
           </div>
         </>
       ) : !report && running ? (
         <div className="feature-empty-state">
           <span><SpinnerGap size={23} className="spin" /></span>
-          <h2>Checking your local setup</h2>
-          <p>Reading safe status metadata from GrokDesk and the official Runtime.</p>
+          <h2>{t("diagnostics.checkingTitle")}</h2>
+          <p>{t("diagnostics.checkingDescription")}</p>
         </div>
       ) : (
         <>
           {error ? <div className="extension-inline-note extension-inline-note--error">{error}</div> : null}
           {notice ? <div className="extension-inline-note extension-inline-note--success">{notice}</div> : null}
 
-          <section className="audit-summary diagnostic-summary" aria-label="Diagnostics summary">
+          <section
+            className="audit-summary diagnostic-summary"
+            aria-label={t("diagnostics.summary")}
+          >
             <div className={`diagnostic-overall diagnostic-overall--${overall}`}>
-              <span>Overall</span><strong>{diagnosticStatusLabels[overall]}</strong>
+              <span>{t("diagnostics.overall")}</span>
+              <strong>{t(diagnosticStatusKeys[overall])}</strong>
             </div>
-            <div><span>Healthy</span><strong>{counts.healthy}</strong></div>
-            <div className={counts.attention > 0 ? "has-attention" : ""}><span>Needs attention</span><strong>{counts.attention}</strong></div>
-            <div className={counts.blocked > 0 ? "has-blocked" : ""}><span>Blocked</span><strong>{counts.blocked}</strong></div>
+            <div>
+              <span>{t("diagnostics.healthy")}</span>
+              <strong>{formatNumber(counts.healthy)}</strong>
+            </div>
+            <div className={counts.attention > 0 ? "has-attention" : ""}>
+              <span>{t("diagnostics.needsAttention")}</span>
+              <strong>{formatNumber(counts.attention)}</strong>
+            </div>
+            <div className={counts.blocked > 0 ? "has-blocked" : ""}>
+              <span>{t("common.blocked")}</span>
+              <strong>{formatNumber(counts.blocked)}</strong>
+            </div>
           </section>
 
           <section className="audit-privacy-note diagnostic-privacy-note">
             <Info size={16} />
             <span>
-              Diagnostics reads status metadata only. Exported reports exclude prompts, responses, terminal output, attachments, absolute paths, account identifiers, OAuth tokens, cookies, and MCP names, endpoints, or headers.
+              {t("diagnostics.privacyNotice")}
             </span>
           </section>
 
-          <section className="diagnostic-list" aria-label="Diagnostic checks">
-            {report?.checks.map((check) => (
+          <section
+            className="diagnostic-list"
+            aria-label={t("diagnostics.checks")}
+          >
+            {report?.checks.map((check) => {
+              const localized = localizeCheck(check);
+              return (
               <article className={`diagnostic-check diagnostic-check--${check.status}`} key={check.id}>
                 <span className="diagnostic-check__icon"><StatusIcon status={check.status} /></span>
                 <div className="diagnostic-check__body">
                   <div className="diagnostic-check__heading">
-                    <strong>{check.title}</strong>
+                    <strong>{localized.title}</strong>
                     <span className={`diagnostic-status diagnostic-status--${check.status}`}>
-                      {diagnosticStatusLabels[check.status]}
+                      {t(diagnosticStatusKeys[check.status])}
                     </span>
                   </div>
-                  <p>{check.summary}</p>
-                  <small>{check.detail}</small>
+                  <p>{localized.summary}</p>
+                  <small>{localized.detail}</small>
                 </div>
                 {check.action ? (
                   <button
@@ -219,11 +356,14 @@ export function DiagnosticCenter({
                     onClick={() => void performAction(check.id, check.action!.kind)}
                   >
                     {actionBusy === check.id ? <SpinnerGap size={14} className="spin" /> : <Wrench size={14} />}
-                    {actionBusy === check.id ? "Working…" : check.action.label}
+                    {actionBusy === check.id
+                      ? t("common.working")
+                      : actionLabel(check.action.kind)}
                   </button>
                 ) : null}
               </article>
-            ))}
+              );
+            })}
           </section>
         </>
       )}

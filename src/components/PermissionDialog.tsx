@@ -1,5 +1,6 @@
 import { Info, ShieldCheck, X } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 import type { PermissionOption, PermissionRequest } from "../types";
 
 interface PermissionDialogProps {
@@ -8,6 +9,7 @@ interface PermissionDialogProps {
 }
 
 export function PermissionDialog({ request, onAnswer }: PermissionDialogProps) {
+  const { t } = useI18n();
   const [answering, setAnswering] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isDenyOption = (option: PermissionOption) =>
@@ -38,18 +40,37 @@ export function PermissionDialog({ request, onAnswer }: PermissionDialogProps) {
         <header>
           <span><ShieldCheck size={21} /></span>
           <div><h2 id="permission-title">{request.title}</h2><p>{request.description}</p></div>
-          <button type="button" className="icon-button" disabled={Boolean(answering)} onClick={() => void answer(null, "cancel")} aria-label="Close"><X size={16} /></button>
+          <button
+            type="button"
+            className="icon-button"
+            disabled={Boolean(answering)}
+            onClick={() => void answer(null, "cancel")}
+            aria-label={t("common.close")}
+          >
+            <X size={16} />
+          </button>
         </header>
         <div className="permission-dialog__notice">
           <Info size={15} />
-          <span>This decision is recorded locally. Prompts, responses, terminal output, and credentials are not stored in permission history.</span>
+          <span>{t("permissionDialog.privacyNotice")}</span>
         </div>
         <div className="permission-dialog__actions">
           {error ? <span className="permission-dialog__error" role="alert">{error}</span> : null}
-          <button type="button" className="secondary-button" disabled={Boolean(answering)} onClick={() => void answer(denyOption || null, "deny")}>{answering === "deny" ? "Sending…" : "Deny"}</button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={Boolean(answering)}
+            onClick={() => void answer(denyOption || null, "deny")}
+          >
+            {answering === "deny"
+              ? t("permissionDialog.sending")
+              : t("permissionDialog.deny")}
+          </button>
           {allowOptions.map((option, index) => (
             <button type="button" className={index === 0 ? "primary-button" : "secondary-button"} disabled={Boolean(answering)} key={option.optionId} onClick={() => void answer(option, option.optionId)}>
-              {answering === option.optionId ? "Sending…" : option.name}
+              {answering === option.optionId
+                ? t("permissionDialog.sending")
+                : option.name}
             </button>
           ))}
         </div>

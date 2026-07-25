@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import packageJson from "../../package.json";
+import { useI18n } from "../i18n/I18nProvider";
 import {
   EMPTY_UPDATE_DOWNLOAD_PROGRESS,
   reduceUpdateDownloadProgress,
@@ -55,12 +56,13 @@ const initialUpdateState = (preview: boolean): AppUpdateState => ({
   progress: EMPTY_UPDATE_DOWNLOAD_PROGRESS,
 });
 
-const updaterErrorMessage = (cause: unknown) => {
+const updaterErrorMessage = (cause: unknown, fallback: string) => {
   const message = cause instanceof Error ? cause.message : String(cause);
-  return message.trim() || "The update service returned an unknown error.";
+  return message.trim() || fallback;
 };
 
 export function useAppUpdate(preview: boolean): AppUpdateController {
+  const { t } = useI18n();
   const [state, setState] = useState<AppUpdateState>(() =>
     initialUpdateState(preview),
   );
@@ -133,10 +135,10 @@ export function useAppUpdate(preview: boolean): AppUpdateController {
         ...current,
         phase: "error",
         checkedAt: new Date().toISOString(),
-        error: updaterErrorMessage(cause),
+        error: updaterErrorMessage(cause, t("updates.unknownError")),
       }));
     }
-  }, [preview]);
+  }, [preview, t]);
 
   useEffect(() => {
     if (preview) {
@@ -155,7 +157,7 @@ export function useAppUpdate(preview: boolean): AppUpdateController {
       setState((current) => ({
         ...current,
         phase: "error",
-        error: "Check for updates again before downloading.",
+        error: t("updates.checkBeforeDownload"),
       }));
       return;
     }
@@ -189,10 +191,10 @@ export function useAppUpdate(preview: boolean): AppUpdateController {
       setState((current) => ({
         ...current,
         phase: "error",
-        error: updaterErrorMessage(cause),
+        error: updaterErrorMessage(cause, t("updates.unknownError")),
       }));
     }
-  }, []);
+  }, [t]);
 
   const installAndRestart = useCallback(async () => {
     const update = updateRef.current;
@@ -200,7 +202,7 @@ export function useAppUpdate(preview: boolean): AppUpdateController {
       setState((current) => ({
         ...current,
         phase: "error",
-        error: "The downloaded update is no longer available. Check again.",
+        error: t("updates.downloadUnavailable"),
       }));
       return;
     }
@@ -221,10 +223,10 @@ export function useAppUpdate(preview: boolean): AppUpdateController {
       setState((current) => ({
         ...current,
         phase: "error",
-        error: updaterErrorMessage(cause),
+        error: updaterErrorMessage(cause, t("updates.unknownError")),
       }));
     }
-  }, []);
+  }, [t]);
 
   return {
     state,

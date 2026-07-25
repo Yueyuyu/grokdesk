@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 import {
   cancelWorkspaceCommand,
   isDesktopRuntime,
@@ -38,7 +39,9 @@ export interface RunningWorkspaceCommand {
 
 export interface WorkspaceTerminalTab {
   id: string;
+  sequence: number;
   title: string;
+  autoTitle: boolean;
   draft: string;
   history: string[];
   historyCursor: number | null;
@@ -65,9 +68,14 @@ const createRuntimeId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-const createTerminalTab = (sequence: number): WorkspaceTerminalTab => ({
+const createTerminalTab = (
+  sequence: number,
+  title: string,
+): WorkspaceTerminalTab => ({
   id: `terminal-${createRuntimeId()}`,
-  title: `Terminal ${sequence}`,
+  sequence,
+  title,
+  autoTitle: true,
   draft: "",
   history: [],
   historyCursor: null,
@@ -109,8 +117,12 @@ export function useWorkspaceTerminal(
   activeTaskId: string | null,
   recordAuditEvent: RecordAuditEvent,
 ) {
+  const { formatNumber, t } = useI18n();
   const [tabs, setTabs] = useState<WorkspaceTerminalTab[]>(() => [
-    createTerminalTab(1),
+    createTerminalTab(
+      1,
+      t("terminal.defaultTitle", { number: formatNumber(1) }),
+    ),
   ]);
   const [activeTabId, setActiveTabId] = useState(() => tabs[0].id);
   const [results, setResults] = useState<WorkspaceCommandSummary[]>([]);
@@ -181,11 +193,40 @@ export function useWorkspaceTerminal(
     lineSequence.current = 0;
     commandTabs.current.clear();
     commandOutput.current.clear();
-    const firstTab = createTerminalTab(1);
+    const firstTab = createTerminalTab(
+      1,
+      t("terminal.defaultTitle", { number: formatNumber(1) }),
+    );
     setTabs([firstTab]);
     setActiveTabId(firstTab.id);
     setResults([]);
-  }, [workspacePath]);
+  }, [formatNumber, t, workspacePath]);
+
+  useEffect(() => {
+    setTabs((current) =>
+      current.map((tab) => {
+        if (!tab.autoTitle) return tab;
+        const title = t("terminal.defaultTitle", {
+          number: formatNumber(tab.sequence),
+        });
+        return tab.title === title ? tab : { ...tab, title };
+      }),
+    );
+  }, [formatNumber, t]);
+
+  useEffect(() => {
+    const titles = new Map(tabs.map((tab) => [tab.id, tab.title]));
+    setResults((current) => {
+      let changed = false;
+      const next = current.map((result) => {
+        const title = titles.get(result.terminalId);
+        if (!title || title === result.terminalTitle) return result;
+        changed = true;
+        return { ...result, terminalTitle: title };
+      });
+      return changed ? next : current;
+    });
+  }, [tabs]);
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const runningCount = tabs.filter((tab) => tab.runningCommand).length;
@@ -203,10 +244,14 @@ export function useWorkspaceTerminal(
 
   const addTab = useCallback(() => {
     if (tabs.length >= MAX_TERMINAL_TABS) return;
-    const next = createTerminalTab(++terminalSequence.current);
+    const sequence = ++terminalSequence.current;
+    const next = createTerminalTab(
+      sequence,
+      t("terminal.defaultTitle", { number: formatNumber(sequence) }),
+    );
     setTabs((current) => [...current, next]);
     setActiveTabId(next.id);
-  }, [tabs.length]);
+  }, [formatNumber, t, tabs.length]);
 
   const closeTab = useCallback(
     (tabId: string) => {
@@ -229,7 +274,11 @@ export function useWorkspaceTerminal(
     (tabId: string, title: string) => {
       const normalized = title.trim().replace(/\s+/g, " ").slice(0, 32);
       if (!normalized) return;
-      updateTab(tabId, (tab) => ({ ...tab, title: normalized }));
+      updateTab(tabId, (tab) => ({
+        ...tab,
+        title: normalized,
+        autoTitle: false,
+      }));
       setResults((current) =>
         current.map((result) =>
           result.terminalId === tabId
@@ -275,14 +324,14 @@ export function useWorkspaceTerminal(
       const command = (commandOverride ?? tab.draft).trim();
       if (!command) return;
       if (!workspacePath.trim()) {
-        append(tab.id, "system", "Choose a workspace before running a command.");
+        append(tab.id, "system", t("terminal.output.chooseWorkspace"));
         return;
       }
       if (!isDesktopRuntime()) {
         append(
           tab.id,
           "system",
-          "Browser preview is read-only. Workspace commands run only in the installed desktop app.",
+          t("terminal.output.previewReadonly"),
         );
         return;
       }
@@ -317,7 +366,7 @@ export function useWorkspaceTerminal(
         taskId: activeTaskId,
         kind: "command",
         title: command,
-        detail: "Workspace command started",
+        detail: t("terminal.audit.started"),
         status: "running",
       });
 
@@ -328,17 +377,28 @@ export function useWorkspaceTerminal(
           append(
             tab.id,
             "system",
-            `Command stopped after ${completion.durationMs} ms.`,
+            t("terminal.output.stopped", {
+              duration: t("tests.duration.milliseconds", {
+                value: formatNumber(completion.durationMs),
+              }),
+            }),
           );
         } else {
-          const exitLabel =
-            completion.exitCode === null
-              ? "without an exit code"
-              : `with exit code ${completion.exitCode}`;
           append(
             tab.id,
             "system",
-            `Command finished ${exitLabel} in ${completion.durationMs} ms.`,
+            completion.exitCode === null
+              ? t("terminal.output.finishedNoExit", {
+                  duration: t("tests.duration.milliseconds", {
+                    value: formatNumber(completion.durationMs),
+                  }),
+                })
+              : t("terminal.output.finished", {
+                  code: formatNumber(completion.exitCode),
+                  duration: t("tests.duration.milliseconds", {
+                    value: formatNumber(completion.durationMs),
+                  }),
+                }),
           );
         }
         recordAuditEvent({
@@ -348,10 +408,12 @@ export function useWorkspaceTerminal(
           kind: "command",
           title: command,
           detail: completion.cancelled
-            ? "Stopped by the user"
+            ? t("terminal.audit.stopped")
             : completion.exitCode === null
-              ? "Finished without an exit code"
-              : `Finished with exit code ${completion.exitCode}`,
+              ? t("terminal.audit.finishedNoExit")
+              : t("terminal.audit.finished", {
+                  code: formatNumber(completion.exitCode),
+                }),
           status: completion.cancelled
             ? "stopped"
             : completion.exitCode === null || completion.exitCode === 0
@@ -368,7 +430,7 @@ export function useWorkspaceTerminal(
           taskId: activeTaskId,
           kind: "command",
           title: command,
-          detail: "Workspace command failed before returning a result",
+          detail: t("terminal.audit.failed"),
           status: "failed",
           durationMs: Date.now() - startedAt,
         });
@@ -391,8 +453,10 @@ export function useWorkspaceTerminal(
       activeTaskId,
       addCommandResult,
       append,
+      formatNumber,
       recordAuditEvent,
       tabs,
+      t,
       updateTab,
       workspacePath,
     ],
@@ -402,14 +466,14 @@ export function useWorkspaceTerminal(
     const commandId = runningByTab.current.get(activeTabId);
     if (!commandId || activeTab?.stopping) return;
     updateTab(activeTabId, (tab) => ({ ...tab, stopping: true }));
-    append(activeTabId, "system", "Stopping command and child processes…");
+    append(activeTabId, "system", t("terminal.output.stopping"));
     try {
       await cancelWorkspaceCommand(commandId);
     } catch (cause) {
       append(activeTabId, "stderr", String(cause).replace(/^Error:\s*/, ""));
       updateTab(activeTabId, (tab) => ({ ...tab, stopping: false }));
     }
-  }, [activeTab?.stopping, activeTabId, append, updateTab]);
+  }, [activeTab?.stopping, activeTabId, append, t, updateTab]);
 
   const recallHistory = useCallback(
     (direction: "older" | "newer") => {

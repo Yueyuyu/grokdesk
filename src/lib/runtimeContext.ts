@@ -14,14 +14,28 @@ export function filterRuntimeSkills(
   );
 }
 
-export function formatContextBytes(bytes: number) {
+export function formatContextBytes(bytes: number, locale = "en") {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  if (bytes < 1_024) return `${Math.round(bytes)} B`;
-  return `${(bytes / 1_024).toFixed(bytes < 10_240 ? 1 : 0)} KB`;
+  if (bytes < 1_024) {
+    return `${new Intl.NumberFormat(locale).format(Math.round(bytes))} B`;
+  }
+  return `${new Intl.NumberFormat(locale, {
+    minimumFractionDigits: bytes < 10_240 ? 1 : 0,
+    maximumFractionDigits: bytes < 10_240 ? 1 : 0,
+  }).format(bytes / 1_024)} KB`;
 }
 
-export function formatContextTokens(tokens: number) {
-  if (!Number.isFinite(tokens) || tokens <= 0) return "0 tokens";
-  if (tokens < 1_000) return `~${Math.round(tokens)} tokens`;
-  return `~${(tokens / 1_000).toFixed(tokens < 10_000 ? 1 : 0)}k tokens`;
+export function formatContextTokens(
+  tokens: number,
+  locale = "en",
+  label = "tokens",
+) {
+  if (!Number.isFinite(tokens) || tokens <= 0) return `0 ${label}`;
+  if (tokens < 1_000) {
+    return `~${new Intl.NumberFormat(locale).format(Math.round(tokens))} ${label}`;
+  }
+  return `~${new Intl.NumberFormat(locale, {
+    minimumFractionDigits: tokens < 10_000 ? 1 : 0,
+    maximumFractionDigits: tokens < 10_000 ? 1 : 0,
+  }).format(tokens / 1_000)}k ${label}`;
 }
