@@ -8,6 +8,8 @@ use tokio::{
     time::timeout,
 };
 
+const MODEL_PROBE_TIMEOUT: Duration = Duration::from_secs(90);
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RuntimeLaunchProfile {
@@ -209,7 +211,7 @@ pub async fn inspect_runtime_models() -> Result<RuntimeModelState, String> {
         .map_err(|error| format!("Failed to flush the Runtime model request: {error}"))?;
 
     let mut lines = BufReader::new(stdout).lines();
-    let initialize = timeout(Duration::from_secs(30), async {
+    let initialize = timeout(MODEL_PROBE_TIMEOUT, async {
         loop {
             let line = lines
                 .next_line()
@@ -231,7 +233,7 @@ pub async fn inspect_runtime_models() -> Result<RuntimeModelState, String> {
         }
     })
     .await
-    .map_err(|_| "The official Runtime model probe timed out.".to_string())?;
+    .map_err(|_| "The official Runtime model probe timed out after 90 seconds.".to_string())?;
 
     drop(stdin);
     let _ = child.kill().await;
