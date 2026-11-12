@@ -50,3 +50,8 @@ When implementing from a selected generated mock, treat that image as the source
 - v0.3.2 establishes the five-language desktop UI: ship complete Simplified Chinese, English, Japanese, Korean, and German catalogs; follow the system by default, fall back to Simplified Chinese for unknown languages, and persist explicit Settings overrides. Localize navigation, controls, forms, dialogs, notifications, accessibility labels, dates, and numbers while preserving Runtime-provided text, model IDs, commands, paths, and raw terminal output verbatim. Keep each catalog in an independent dynamic chunk so localization does not regress the v0.3.1 492.24 KB synchronous-entry baseline.
 - Account activity remains split by provenance. Subscription and quota values may come only from the official Runtime billing response. The activity heatmap and recent-task table are local GrokDesk aggregates from saved workspace tasks, messages, and tool records, are labeled local-only, and must never be presented as xAI account usage. Browser previews show no simulated account or activity records.
 - The task inspector belongs to the task command center only. Account, Settings, Permissions, Diagnostics, Plugins, and MCP use the full content region and must not be obscured by a stale task inspector, especially at the 980 px minimum window width.
+
+
+## 提交与推送固定流程
+
+提交前先读 [.github/PREFLIGHT.md](.github/PREFLIGHT.md)，新检出先启用仓库 hooks。精确暂存、检查暂存 diff，运行 `node .github/scripts/preflight.mjs verify --staged`，通过后才提交和推送。检查脚本/工作流引用与漏提交，任何命令失败立即停止；验证记录绑定实际 Git 树，不借用工作目录或旧提交的通过结果。每次一个逻辑改动，其他任务的改动留在原处，必要时隔离工作树验证。发布资格检查仍遵循本项目原有要求。
