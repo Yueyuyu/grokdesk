@@ -28,7 +28,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: node --test .github/scripts/change-scope.test.mjs
+      - run: node --test .github/scripts/change-scope.checks.mjs
       - id: scope
         run: node .github/scripts/change-scope.mjs
   verify:
